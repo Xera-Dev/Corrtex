@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reader-toggle"
+description = "Enables the reader_toggle command without any pre-configured scope."
+commands.allow = ["reader_toggle"]
+
+[[permission]]
+identifier = "deny-reader-toggle"
+description = "Denies the reader_toggle command without any pre-configured scope."
+commands.deny = ["reader_toggle"]

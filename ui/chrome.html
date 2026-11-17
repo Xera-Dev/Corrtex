@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Corrtex</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="chrome.css">
+<script src="common.js"></script>
+</head>
+<body>
+  <!-- Barre d'onglets (zone de déplacement de la fenêtre) -->
+  <div id="tabstrip" data-tauri-drag-region>
+    <div id="private-badge" title="Navigation privée : aucun historique, cookies effacés à la fermeture" hidden>
+      <svg viewBox="0 0 24 24"><path d="M3 11.5c2.5-.6 5.5-1 9-1s6.5.4 9 1"/><path d="M6.5 10.5l1.5-5.5h8l1.5 5.5"/><circle cx="8" cy="16" r="2.5"/><circle cx="16" cy="16" r="2.5"/><path d="M10.5 16h3"/></svg>
+      <span>Privé</span>
+    </div>
+    <div id="profile-badge" hidden><i></i><span></span></div>
+    <button id="space-btn" title="Espaces"><i></i><span></span></button>
+    <div id="tabs"></div>
+    <button id="newtab" class="glass-round" title="Nouvel onglet (Ctrl+T)">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <div class="drag-fill" data-tauri-drag-region></div>
+    <div id="winctrl">
+      <button id="win-min" title="Réduire"><svg viewBox="0 0 12 12"><path d="M1 6h10"/></svg></button>
+      <button id="win-max" title="Agrandir"><svg viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/></svg></button>
+      <button id="win-close" title="Fermer"><svg viewBox="0 0 12 12"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9"/></svg></button>
+    </div>
+  </div>
+
+  <!-- Barre d'outils -->
+  <div id="toolbar">
+    <button id="back" class="icon-btn" title="Précédent (Alt+←)"><svg viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>
+    <button id="forward" class="icon-btn" title="Suivant (Alt+→)"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+    <button id="reload" class="icon-btn" title="Actualiser (F5)">
+      <svg class="i-reload" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+    </button>
+
+    <form id="omnibox">
+      <span id="omni-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></span>
+      <input id="address" type="text" spellcheck="false" autocomplete="off"
+             placeholder="Rechercher avec Corrtex ou saisir une URL">
+      <button type="button" id="zoom-badge" class="zoom-badge" title="Zoom de ce site — cliquer pour revenir à 100 %" hidden>100 %</button>
+      <button type="button" id="focus-badge" class="icon-btn small" title="Mode concentration — cliquer pour arrêter" hidden>
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg><span></span>
+      </button>
+      <button type="button" id="split-exit" class="icon-btn small" title="Quitter la vue côte à côte" hidden>
+        <svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M12 4.5v15M15 10l3 2-3 2"/></svg>
+      </button>
+      <button type="button" id="note-btn" class="icon-btn small" title="Notes de ce site" hidden>
+        <svg viewBox="0 0 24 24"><path d="M6.5 3.5h8l4 4v12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1z"/><path d="M14.5 3.5v4h4M8.5 12h7M8.5 15.5h5"/></svg>
+      </button>
+      <button type="button" id="translate" class="icon-btn small" title="Traduire la page en français" hidden>
+        <svg viewBox="0 0 24 24"><path d="M4 5.5h9M8.5 3.5v2M6 5.5c.6 3 2.6 5.4 5 6.5M11 5.5c-.7 3.4-3 6-6.5 7.5M13 20.5l3.8-9 3.7 9M14.3 17.5h5"/></svg>
+      </button>
+      <button type="button" id="reader" class="icon-btn small" title="Mode lecture" hidden>
+        <svg viewBox="0 0 24 24"><path d="M12 6.5c-1.8-1.3-4.3-2-7.5-2v13c3.2 0 5.7.7 7.5 2 1.8-1.3 4.3-2 7.5-2v-13c-3.2 0-5.7.7-7.5 2z"/><path d="M12 6.5v13"/></svg>
+      </button>
+      <button type="button" id="star" class="icon-btn small" title="Ajouter aux favoris">
+        <svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>
+      </button>
+    </form>
+
+    <button id="update-pill" class="update-pill" title="Installer la nouvelle version et redémarrer Corrtex" hidden>
+      <svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg><span>Mettre à jour</span>
+    </button>
+    <button id="dl-toggle" class="icon-btn" title="Téléchargements (Ctrl+J)" hidden>
+      <svg viewBox="0 0 24 24"><path d="M12 4.5v10.5M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg>
+    </button>
+    <button id="ext-toggle" class="icon-btn" title="Extensions" hidden>
+      <svg viewBox="0 0 24 24"><path d="M7 5.5h2.6a.4.4 0 0 0 .4-.4V4.8a2 2 0 0 1 4 0v.3a.4.4 0 0 0 .4.4H17a1.5 1.5 0 0 1 1.5 1.5v2.6a.4.4 0 0 0 .4.4h.3a2 2 0 0 1 0 4h-.3a.4.4 0 0 0-.4.4V17a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 17V7A1.5 1.5 0 0 1 7 5.5z"/></svg>
+    </button>
+    <button id="tools-toggle" class="icon-btn" title="Outils : historique, téléchargements, confidentialité, performances">
+      <svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.8"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.8"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.8"/><path d="M16.75 13.8v5.9M13.8 16.75h5.9"/></svg>
+    </button>
+    <button id="ai-toggle" class="icon-btn" title="Panneau IA">
+      <svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M14.5 4.5v15"/><path d="M8.5 9.2l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7z" stroke-width="1.4"/></svg>
+    </button>
+  </div>
+
+  <!-- Favoris (repliée quand la page défile) -->
+  <div id="bm-wrap"><div id="bookmarks"></div></div>
+
+  <script src="chrome.js"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Outils</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="newtab.css">
+<script src="common.js"></script>
+<script src="tools-ui.js"></script>
+<style>
+  /* exactement le panneau de la page d'accueil (marges de 14 px, coins arrondis, ombre, glissement
+     depuis la droite) ; la fenêtre est transparente autour. Sans flou possible derrière (autre fenêtre),
+     le fond est un peu plus opaque pour rester lisible sur n'importe quelle page. */
+  html, body { background: transparent !important; overflow: hidden; }
+  .drawer { background: color-mix(in srgb, var(--card-solid) 96%, transparent); backdrop-filter: none; -webkit-backdrop-filter: none; }
+</style>
+</head>
+<body>
+  <section class="drawer" id="drawer">
+    <header>
+      <h2>Outils</h2>
+      <button id="close" class="round-btn small" title="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div id="tools-body"></div>
+  </section>
+  <script>
+    (function () {
+      const C = window.Corrtex;
+      const close = () => C.invoke('close_panel');
+      document.getElementById('close').onclick = close;
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+      const tools = window.CorrtexTools.mount(document.getElementById('tools-body'), close);
+      tools.start();
+    })();
+  </script>
+  <script>requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById('drawer').classList.add('open')));</script>
+</body>
+</html>

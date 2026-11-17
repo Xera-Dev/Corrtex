@@ -1,0 +1,69 @@
+# Publie une nouvelle version de Corrtex pour Windows et Mac.
+# Déclenchement : envoi d'une étiquette vX.Y.Z (git tag v0.3.0 && git push --tags),
+# ou à la main : onglet « Actions » › « Publier une version » › « Run workflow ».
+# La version publiée est celle de src-tauri/tauri.conf.json.
+#
+# Chaque version contient l'installateur Windows, l'image disque Mac (Apple Silicon et Intel)
+# et le fichier latest.json signé que Corrtex lit pour se mettre à jour tout seul.
+# Secret nécessaire (Settings › Secrets and variables › Actions) : TAURI_SIGNING_PRIVATE_KEY.
+name: Publier une version
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target universal-apple-darwin
+          - platform: windows-latest
+            args: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Cache de compilation
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Outil Tauri
+        run: npm install
+
+      - name: Compilation et publication
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        with:
+          tagName: v__VERSION__
+          releaseName: Corrtex v__VERSION__
+          releaseBody: |
+            Nouvelle version de Corrtex.
+
+            **Déjà installé ?** Corrtex se met à jour tout seul : cliquez sur « Mettre à jour » dans la barre d'outils.
+
+            **Première installation**
+            - Windows : `Corrtex_…_x64-setup.exe`
+            - Mac (Apple Silicon et Intel) : `Corrtex_…_universal.dmg`. Au premier lancement : clic droit sur Corrtex › Ouvrir (application non signée par Apple).
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

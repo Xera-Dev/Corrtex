@@ -1,0 +1,11 @@
+{
+  "name": "corrtex",
+  "private": true,
+  "scripts": {
+    "tauri": "tauri",
+    "version:set": "node scripts/set-version.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

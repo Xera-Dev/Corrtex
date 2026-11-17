@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-perf-sleep"
+description = "Enables the perf_sleep command without any pre-configured scope."
+commands.allow = ["perf_sleep"]
+
+[[permission]]
+identifier = "deny-perf-sleep"
+description = "Denies the perf_sleep command without any pre-configured scope."
+commands.deny = ["perf_sleep"]

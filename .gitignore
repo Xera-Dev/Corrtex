@@ -1,0 +1,17 @@
+# compilation
+src-tauri/target/
+src-tauri/gen/schemas/
+node_modules/
+
+# applications compilées et archives
+*.exe
+*.msi
+*.dmg
+Corrtex.app/
+Corrtex-mac.zip
+
+# clés et journaux : ne jamais publier
+*.key
+*.key.pub
+corrtex-debug.log
+.DS_Store

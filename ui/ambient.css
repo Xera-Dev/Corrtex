@@ -1,0 +1,37 @@
+/* Lueur d'ambiance animée de Corrtex, partagée par toutes les pages internes
+   (même rendu que la page d'accueil : voir ambient.js pour les couleurs). */
+/* ------------------------------------------------ lumière d'ambiance
+   Trois halos en dégradé radial (pas de filtre de flou : très léger pour la carte
+   graphique), déplacés uniquement par transform -> animation fluide et économe. */
+#ambient { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.blob {
+  position: absolute; width: 85vmax; height: 85vmax; border-radius: 50%;
+  left: calc(50% - 42.5vmax); top: calc(50% - 42.5vmax);
+  background: radial-gradient(circle, var(--c) 0%, color-mix(in srgb, var(--c) 45%, transparent) 28%, transparent 66%);
+  opacity: calc(var(--light-strength) * var(--intensity, 1));
+  will-change: transform; transition: opacity 1.2s, background 1.2s;
+}
+[data-theme="graphite"] .blob, [data-theme="minuit"] .blob, [data-theme="ocean"] .blob { mix-blend-mode: screen; }
+.b1 { --c: var(--l1, #ff4f7b); animation: drift1 34s ease-in-out infinite alternate; }
+.b2 { --c: var(--l2, #ff8a3d); animation: drift2 42s ease-in-out infinite alternate; width: 70vmax; height: 70vmax; }
+.b3 { --c: var(--l3, #c86bff); animation: drift3 51s ease-in-out infinite alternate; width: 60vmax; height: 60vmax; }
+@keyframes drift1 {
+  0%   { transform: translate(-38vw, -30vh) scale(1); }
+  35%  { transform: translate(18vw, -18vh) scale(1.15); }
+  70%  { transform: translate(30vw, 26vh) scale(.92); }
+  100% { transform: translate(-22vw, 30vh) scale(1.08); }
+}
+@keyframes drift2 {
+  0%   { transform: translate(36vw, 28vh) scale(1.1); }
+  40%  { transform: translate(-26vw, 18vh) scale(.9); }
+  75%  { transform: translate(-30vw, -26vh) scale(1.2); }
+  100% { transform: translate(24vw, -30vh) scale(1); }
+}
+@keyframes drift3 {
+  0%   { transform: translate(6vw, -36vh) scale(.9); }
+  50%  { transform: translate(-34vw, 4vh) scale(1.2); }
+  100% { transform: translate(34vw, 10vh) scale(1); }
+}
+body.light-off .blob { opacity: 0; }
+body.paused .blob { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .blob { animation-duration: 240s; } }

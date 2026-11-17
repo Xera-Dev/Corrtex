@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Nouvel onglet</title>
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="newtab.css">
+<script src="common.js"></script>
+<script src="tools-ui.js"></script>
+</head>
+<body>
+  <!-- Lumière d'ambiance : halos très flous qui se déplacent lentement -->
+  <div id="ambient" aria-hidden="true">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+  </div>
+
+  <!-- Fond d'écran choisi (dégradé animé, image ou vidéo) -->
+  <div id="wall" aria-hidden="true"></div>
+  <!-- Widgets : horloge, météo, tâches, citation -->
+  <div id="widgets"></div>
+  <!-- Message (mise à jour, nouveautés) -->
+  <div id="toast" hidden></div>
+  <div id="topbar">
+    <button id="more" class="more-dots" title="Plus" aria-label="Plus"><span></span><span></span><span></span></button>
+    <div class="top-items">
+    <button id="google-btn" class="google-signin" title="Se connecter à Google">
+      <svg class="g-logo" viewBox="0 0 24 24"><path fill="#4285F4" stroke="none" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3z"/><path fill="#34A853" stroke="none" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z"/><path fill="#FBBC05" stroke="none" d="M6.4 14c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V7.4H3.1a10 10 0 0 0 0 9.2z"/><path fill="#EA4335" stroke="none" d="M12 6c1.5 0 2.8.5 3.8 1.5l2.9-2.9A10 10 0 0 0 3.1 7.4L6.4 10C7.2 7.7 9.4 6 12 6z"/></svg>
+      <span>Se connecter</span>
+    </button>
+    <button id="avatar-btn" class="avatar-btn" title="Compte Google" hidden><img id="avatar-img" alt=""><span id="avatar-letter"></span></button>
+    <button id="open-tools" class="round-btn" title="Outils : historique, téléchargements, confidentialité, performances">
+      <svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.8"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.8"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.8"/><path d="M16.75 13.8v5.9M13.8 16.75h5.9"/></svg>
+    </button>
+    <button id="open-extensions" class="round-btn" title="Extensions">
+      <svg viewBox="0 0 24 24"><path d="M7 5.5h2.6a.4.4 0 0 0 .4-.4V4.8a2 2 0 0 1 4 0v.3a.4.4 0 0 0 .4.4H17a1.5 1.5 0 0 1 1.5 1.5v2.6a.4.4 0 0 0 .4.4h.3a2 2 0 0 1 0 4h-.3a.4.4 0 0 0-.4.4V17a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 17V7A1.5 1.5 0 0 1 7 5.5z"/></svg>
+    </button>
+    <button id="open-settings" class="round-btn" title="Paramètres">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+    </div>
+  </div>
+
+  <!-- Outils : historique, téléchargements, confidentialité, performances (et futures idées) -->
+  <section id="tools" class="drawer" aria-hidden="true">
+    <header>
+      <h2>Outils</h2>
+      <button class="round-btn small drawer-close" title="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+
+    <div id="tools-body"></div>
+  </section>
+
+  <!-- Panneau du compte Google (même présentation que les paramètres) -->
+  <section id="account" class="drawer" aria-hidden="true">
+    <header>
+      <h2>Compte Google</h2>
+      <button class="round-btn small drawer-close" title="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div class="group profile">
+      <div class="gm-avatar"><img id="gm-img" alt=""><span id="gm-letter"></span></div>
+      <div class="gm-id"><div id="gm-name"></div><div id="gm-email"></div></div>
+    </div>
+    <div id="gm-list"></div>
+  </section>
+
+  <!-- Panneau des extensions -->
+  <section id="extensions" class="drawer" aria-hidden="true">
+    <header>
+      <h2>Extensions</h2>
+      <button class="round-btn small drawer-close" title="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div class="group">
+      <h3>Ajouter une extension</h3>
+      <p class="hint">Ouvrez la page d’une extension sur le Chrome Web Store et cliquez sur « Ajouter à Corrtex », ou collez son lien ici.</p>
+      <form id="ext-form" class="inline-form">
+        <input id="ext-input" type="text" spellcheck="false" placeholder="Lien du Chrome Web Store">
+        <button type="submit" class="chip sel">Ajouter</button>
+      </form>
+      <p id="ext-status" class="status" hidden></p>
+      <button id="ext-store" class="row-link">
+        <svg viewBox="0 0 24 24"><path d="M4 8h16l-1.5 11a1.5 1.5 0 0 1-1.5 1.3H7a1.5 1.5 0 0 1-1.5-1.3z"/><path d="M8.5 8V6.5a3.5 3.5 0 0 1 7 0V8"/></svg>
+        <span>Parcourir le Chrome Web Store</span>
+        <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+    <div class="group">
+      <h3>Installées</h3>
+      <div id="ext-list"></div>
+    </div>
+  </section>
+
+  <!-- Widget musique : affiche ce qui est en lecture dans un onglet -->
+  <aside id="player" class="idle noart" aria-hidden="true">
+    <div class="player-bg"></div>
+    <button id="art" class="art" title="Aller à l'onglet en lecture">
+      <img id="art-img" alt="">
+      <div class="art-placeholder">
+        <svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>
+      </div>
+    </button>
+    <div class="controls">
+      <button id="prev" class="ctl" title="Précédent">
+        <svg viewBox="0 0 24 24"><path d="M11 6L3 12l8 6zM21 6l-8 6 8 6z"/></svg>
+      </button>
+      <button id="toggle" class="play" title="Lecture / pause">
+        <svg class="i-note" viewBox="0 0 24 24"><path d="M9 17.5V6.5l10-2v11"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/></svg>
+        <svg class="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>
+        <svg class="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg>
+      </button>
+      <button id="next" class="ctl" title="Suivant">
+        <svg viewBox="0 0 24 24"><path d="M13 6l8 6-8 6zM3 6l8 6-8 6z"/></svg>
+      </button>
+    </div>
+    <div class="meta"><span id="m-title">Aucune lecture</span><span class="sep"> - </span><span id="m-artist">Lancez une musique dans un onglet</span></div>
+    <div class="progress"><div id="m-progress"></div></div>
+  </aside>
+
+  <main>
+    <h1 class="logo">Corrtex<svg class="swoosh" viewBox="0 0 60 40"><path d="M4 34C18 30 34 20 46 8"/><path d="M36 6l14-2-4 13" /></svg></h1>
+
+    <div id="private-hero" hidden>
+      <svg viewBox="0 0 24 24"><path d="M3 11.5c2.5-.6 5.5-1 9-1s6.5.4 9 1"/><path d="M6.5 10.5l1.5-5.5h8l1.5 5.5"/><circle cx="8" cy="16" r="2.5"/><circle cx="16" cy="16" r="2.5"/><path d="M10.5 16h3"/></svg>
+      <div><b>Navigation privée</b><span>Les pages ne sont pas enregistrées dans l’historique, et leurs cookies sont effacés quand vous fermez toutes les fenêtres privées.</span></div>
+    </div>
+
+    <form id="search" autocomplete="off">
+      <svg class="s-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+      <input id="q" type="text" spellcheck="false" placeholder="Rechercher avec Corrtex ou saisir une URL" autofocus>
+      <button type="button" id="mic" title="Recherche vocale">
+        <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+      </button>
+    </form>
+    <div id="sugg" class="glass-sugg" hidden></div>
+  </main>
+
+  <!-- Panneau des paramètres -->
+  <div id="settings-scrim" hidden></div>
+  <section id="settings" class="drawer" aria-hidden="true">
+    <header>
+      <h2>Paramètres</h2>
+      <button class="round-btn small drawer-close" title="Fermer">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </header>
+
+    <div class="group">
+      <h3>IA à privilégier</h3>
+      <p class="hint">Celle qui s’ouvre dans le panneau latéral.</p>
+      <div id="set-ai" class="chips"></div>
+      <div class="row" style="margin-top:16px">
+        <span class="hint" style="margin:0">Mémoire des conversations par site</span>
+        <label class="switch"><input type="checkbox" id="set-memory"><span></span></label>
+      </div>
+      <p class="hint" style="margin-top:6px">Le panneau IA rouvre automatiquement la conversation que vous aviez sur chaque site.</p>
+    </div>
+
+    <div class="group">
+      <h3>Confidentialité</h3>
+      <div class="row" style="margin-top:12px">
+        <span class="hint" style="margin:0">Enregistrer les pages visitées dans l’historique</span>
+        <label class="switch"><input type="checkbox" id="set-history"><span></span></label>
+      </div>
+      <p class="hint" style="margin-top:6px">Les fenêtres privées ne sont jamais enregistrées.</p>
+    </div>
+
+    <div class="group">
+      <h3>Onglets</h3>
+      <div class="row" style="margin-top:12px">
+        <span class="hint" style="margin:0">Rouvrir les onglets de la dernière fois</span>
+        <label class="switch"><input type="checkbox" id="set-restore"><span></span></label>
+      </div>
+      <p class="hint" style="margin-top:14px">Mettre en veille les onglets inactifs après :</p>
+      <div id="set-sleep" class="chips"></div>
+    </div>
+
+    <div class="group">
+      <h3>Gestes et raccourcis</h3>
+      <div class="row" style="margin-top:12px">
+        <span class="hint" style="margin:0">Gestes de la souris (clic droit maintenu + glisser)</span>
+        <label class="switch"><input type="checkbox" id="set-gestures"><span></span></label>
+      </div>
+      <p class="hint" style="margin-top:6px">← précédent · → suivant · ↑ actualiser · ↓ nouvel onglet · ↓→ fermer · ←↑ rouvrir</p>
+      <p class="hint" style="margin-top:14px">Raccourcis clavier : cliquez sur une touche puis tapez la nouvelle combinaison.</p>
+      <div id="set-keys" class="list"></div>
+    </div>
+
+    <div class="group">
+      <h3>Sauvegarde</h3>
+      <p class="hint" style="margin-top:12px">Favoris, thème, lumières et réglages dans un fichier, à garder ou à importer sur un autre PC.</p>
+      <div class="chips" style="margin-top:12px">
+        <button class="chip" id="backup-export">Exporter</button>
+        <button class="chip" id="backup-import">Importer…</button>
+        <input type="file" id="backup-file" accept=".json,application/json" hidden>
+      </div>
+      <p class="hint" id="backup-msg" style="margin-top:10px; display:none"></p>
+    </div>
+
+    <div class="group">
+      <h3>Thème</h3>
+      <div id="set-theme" class="themes"></div>
+      <div class="row" style="margin-top:14px">
+        <span class="hint" style="margin:0">Appliquer le thème aux pages Google</span>
+        <label class="switch"><input type="checkbox" id="set-google"><span></span></label>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="row">
+        <h3>Lumière d’ambiance</h3>
+        <label class="switch"><input type="checkbox" id="set-light-on"><span></span></label>
+      </div>
+      <p class="hint">Un halo de couleur qui se promène doucement sur le fond.</p>
+      <div id="set-light" class="swatches"></div>
+      <label class="slider">Intensité
+        <input type="range" id="set-intensity" min="0.4" max="1.8" step="0.1">
+      </label>
+    </div>
+
+    <div class="group">
+      <h3>Fond d’écran</h3>
+      <p class="hint">Le fond de la page d’accueil.</p>
+      <div id="set-wall" class="walls"></div>
+      <div class="chips" style="margin-top:12px">
+        <button class="chip" id="wall-img">Image…</button>
+        <button class="chip" id="wall-vid">Vidéo…</button>
+        <input type="file" id="wall-file" hidden>
+      </div>
+      <label class="slider">Assombrir
+        <input type="range" id="set-dim" min="0" max="0.7" step="0.05">
+      </label>
+    </div>
+
+    <div class="group">
+      <h3>Widgets</h3>
+      <p class="hint">Petites cartes en bas de la page d’accueil.</p>
+      <div class="list" id="set-widgets"></div>
+      <div id="weather-city" class="inline-form" style="margin-top:10px" hidden>
+        <input id="city-input" type="text" spellcheck="false" placeholder="Ville pour la météo (ex. Paris)">
+        <button class="chip sel" id="city-save">OK</button>
+      </div>
+      <p class="hint" id="city-msg" hidden></p>
+    </div>
+
+    <div class="group">
+      <h3>Mode concentration</h3>
+      <p class="hint">Masque les onglets et les favoris, et bloque les sites qui distraient pendant la durée choisie.</p>
+      <div class="chips" id="focus-chips"></div>
+      <p class="hint" style="margin-top:12px">Sites bloqués (un par ligne) :</p>
+      <textarea id="focus-sites" class="area" rows="4" spellcheck="false"></textarea>
+    </div>
+
+    <div class="group">
+      <h3>Profils</h3>
+      <p class="hint">Chaque profil a ses propres connexions et cookies (perso, travail…). Il s’ouvre dans sa propre fenêtre.</p>
+      <div class="list" id="profiles"></div>
+      <div class="inline-form" style="margin-top:10px">
+        <input id="profile-name" type="text" spellcheck="false" maxlength="30" placeholder="Nouveau profil (ex. Travail)">
+        <button class="chip sel" id="profile-add">Créer</button>
+      </div>
+      <p class="hint" id="profile-msg" hidden></p>
+    </div>
+
+    <div class="group">
+      <h3>Économie d’énergie</h3>
+      <p class="hint">Animations en pause et onglets inactifs mis en veille plus tôt (10 min).</p>
+      <div class="chips" id="power-chips"></div>
+      <p class="hint" id="power-state" style="margin-top:10px"></p>
+    </div>
+
+    <div class="group">
+      <h3>À propos de Corrtex</h3>
+      <p class="hint" id="about-version"></p>
+      <div class="chips" style="margin-top:10px">
+        <button class="chip" id="whatsnew-btn">Nouveautés</button>
+        <button class="chip" id="update-btn">Rechercher des mises à jour</button>
+      </div>
+      <p class="hint" id="update-msg" hidden></p>
+      <div class="chips" style="margin-top:8px" id="update-install-row" hidden>
+        <button class="chip sel" id="update-install">Installer et redémarrer</button>
+      </div>
+      <p class="hint" style="margin-top:12px">Corrtex vérifie les nouvelles versions au démarrage puis toutes les 6 heures (github.com/Xera-Dev/Corrtex).</p>
+    </div>
+  </section>
+
+  <script src="ext-ui.js"></script>
+  <script src="newtab.js"></script>
+  <script src="newtab-perso.js"></script>
+</body>
+</html>

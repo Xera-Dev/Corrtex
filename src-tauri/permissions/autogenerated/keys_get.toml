@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-keys-get"
+description = "Enables the keys_get command without any pre-configured scope."
+commands.allow = ["keys_get"]
+
+[[permission]]
+identifier = "deny-keys-get"
+description = "Denies the keys_get command without any pre-configured scope."
+commands.deny = ["keys_get"]

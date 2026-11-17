@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Extensions</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="newtab.css">
+<script src="common.js"></script>
+<style>
+  /* exactement le panneau de la page d'accueil (marges de 14 px, coins arrondis, ombre, glissement
+     depuis la droite) ; la fenêtre est transparente autour. Sans flou possible derrière (autre fenêtre),
+     le fond est un peu plus opaque pour rester lisible sur n'importe quelle page. */
+  html, body { background: transparent !important; overflow: hidden; }
+  .drawer { background: color-mix(in srgb, var(--card-solid) 96%, transparent); backdrop-filter: none; -webkit-backdrop-filter: none; }
+</style>
+</head>
+<body>
+  <section class="drawer" id="drawer">
+    <header>
+      <h2>Extensions</h2>
+      <button id="close" class="round-btn small" title="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div class="group">
+      <h3>Ajouter une extension</h3>
+      <p class="hint">Ouvrez la page d’une extension sur le Chrome Web Store et cliquez sur « Ajouter à Corrtex », ou collez son lien ici.</p>
+      <form id="ext-form" class="inline-form">
+        <input id="ext-input" type="text" spellcheck="false" placeholder="Lien du Chrome Web Store">
+        <button type="submit" class="chip sel">Ajouter</button>
+      </form>
+      <p id="ext-status" class="status" hidden></p>
+      <button id="ext-store" class="row-link">
+        <svg viewBox="0 0 24 24"><path d="M4 8h16l-1.5 11a1.5 1.5 0 0 1-1.5 1.3H7a1.5 1.5 0 0 1-1.5-1.3z"/><path d="M8.5 8V6.5a3.5 3.5 0 0 1 7 0V8"/></svg>
+        <span>Parcourir le Chrome Web Store</span>
+        <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+    <div class="group">
+      <h3>Installées</h3>
+      <div id="ext-list"></div>
+    </div>
+  </section>
+  <script src="ext-ui.js"></script>
+  <script>
+    (function () {
+      const C = window.Corrtex;
+      const close = () => C.invoke('close_panel');
+      const ui = C.mountExtensions({
+        list: 'ext-list', form: 'ext-form', input: 'ext-input', status: 'ext-status', store: 'ext-store',
+        onStore: () => { C.invoke('navigate', { url: 'https://chromewebstore.google.com/' }); close(); }
+      });
+      document.getElementById('close').addEventListener('click', close);
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+      // ouvrir une page d'extension ferme le panneau
+      document.addEventListener('click', (e) => { const b = e.target.closest('.ext-actions button:not(.danger)'); if (b) setTimeout(close, 50); });
+      ui.load();
+    })();
+  </script>
+  <script>requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById('drawer').classList.add('open')));</script>
+</body>
+</html>

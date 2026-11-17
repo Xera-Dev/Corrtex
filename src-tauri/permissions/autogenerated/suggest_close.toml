@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-suggest-close"
+description = "Enables the suggest_close command without any pre-configured scope."
+commands.allow = ["suggest_close"]
+
+[[permission]]
+identifier = "deny-suggest-close"
+description = "Denies the suggest_close command without any pre-configured scope."
+commands.deny = ["suggest_close"]

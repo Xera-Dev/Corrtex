@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-read-later-add"
+description = "Enables the read_later_add command without any pre-configured scope."
+commands.allow = ["read_later_add"]
+
+[[permission]]
+identifier = "deny-read-later-add"
+description = "Denies the read_later_add command without any pre-configured scope."
+commands.deny = ["read_later_add"]

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Suggestions</title>
+<link rel="stylesheet" href="theme.css">
+<script src="common.js"></script>
+<style>
+  /* fenêtre flottante transparente : une carte arrondie avec une vraie ombre */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: transparent; overflow: hidden; user-select: none; -webkit-user-select: none; }
+  body { padding: 4px 14px 14px; font: 14px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--fg); }
+  svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; opacity: .7; }
+  #list {
+    padding: 6px; border-radius: 18px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--card-solid) 96%, #fff 4%), var(--card-solid));
+    border: 1px solid var(--glass-border);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 10px 26px rgba(0,0,0,.42);
+    animation: drop .14s ease-out;
+  }
+  @keyframes drop { from { opacity: 0; transform: translateY(-4px); } }
+  .item { height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 12px; cursor: default; white-space: nowrap; overflow: hidden; color: var(--fg-dim); }
+  .item:hover { background: var(--hover); }
+  .item.sel { background: color-mix(in srgb, var(--l1, #ff4f7b) 18%, var(--hover)); color: var(--fg); }
+  .item span { overflow: hidden; text-overflow: ellipsis; }
+  .item b { font-weight: 600; color: var(--fg); }
+  .item .hint { margin-left: auto; font-size: 12.5px; color: var(--fg-dim); font-style: normal; }
+  .item img { width: 17px; height: 17px; border-radius: 4px; flex: none; }
+  .item .u { color: var(--fg-dim); font-weight: 400; }
+  .item .u b { color: color-mix(in srgb, var(--l2, #7aa2ff) 70%, var(--fg)); }
+</style>
+</head>
+<body>
+  <div id="list"></div>
+  <script>
+    (function () {
+      const C = window.Corrtex;
+      const list = document.getElementById('list');
+      const ICON_SEARCH = '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>';
+      const ICON_HIST = '<svg viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3.5 4v4.5H8"/><path d="M12 7.5V12l3 2"/></svg>';
+      const ICON_URL = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>';
+
+      function render(d) {
+        // la liste vit dans une fenêtre « sugw-wN » : elle concerne la fenêtre « wN »
+        if (!d || (d.win && d.win !== C.win().replace(/^sugw-/, ''))) return;
+        list.replaceChildren();
+        (d.items || []).forEach((it, i) => {
+          const el = document.createElement('div');
+          el.className = 'item' + (i === d.selected ? ' sel' : '');
+          const q = (d.query || '').toLowerCase();
+          if (it.type === 'history') {
+            // site déjà visité : icône du site, titre, puis adresse ; le texte tapé en gras, comme dans Chrome
+            const img = document.createElement('img');
+            img.src = C.favicon(it.url);
+            img.onerror = () => img.replaceWith(document.createRange().createContextualFragment(ICON_HIST));
+            const span = document.createElement('span');
+            const qb = q.replace(/^https?:\/\//, '').replace(/^www\./, '');
+            const mark = (parent, text) => {
+              const i = qb ? text.toLowerCase().indexOf(qb) : -1;
+              if (i < 0) { parent.append(document.createTextNode(text)); return; }
+              const b = document.createElement('b');
+              b.textContent = text.slice(i, i + qb.length);
+              parent.append(document.createTextNode(text.slice(0, i)), b, document.createTextNode(text.slice(i + qb.length)));
+            };
+            mark(span, it.title || it.text);
+            if (it.title && it.title.toLowerCase() !== it.text.toLowerCase()) {
+              const u = document.createElement('span');
+              u.className = 'u';
+              u.append(document.createTextNode(' – '));
+              mark(u, it.text);
+              span.append(u);
+            }
+            el.append(img, span);
+            const h = document.createElement('em');
+            h.className = 'hint';
+            h.textContent = it.top ? 'Ouvrir' : 'Historique';
+            el.append(h);
+          } else {
+          el.innerHTML = (it.type === 'url' ? ICON_URL : ICON_SEARCH) + '<span></span>' + (it.type === 'url' ? '<em class="hint">Ouvrir</em>' : '');
+          const span = el.querySelector('span');
+          // comme dans Chrome : la partie déjà tapée en normal, la suite en gras
+          if (it.type !== 'url' && q && it.text.toLowerCase().startsWith(q)) {
+            span.append(document.createTextNode(it.text.slice(0, q.length)));
+            const b = document.createElement('b');
+            b.textContent = it.text.slice(q.length);
+            span.append(b);
+          } else span.textContent = it.text;
+          }
+          el.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            const url = it.type === 'url' || it.type === 'history' ? it.url : 'https://www.google.com/search?q=' + encodeURIComponent(it.text);
+            C.invoke('navigate', { url });
+            C.invoke('suggest_close');
+          });
+          list.appendChild(el);
+        });
+      }
+      document.documentElement.style.setProperty('--l1', C.prefs().light || '#ff4f7b');
+      C.listen('suggestions', render);
+      C.invoke('suggest_get').then(render);
+    })();
+  </script>
+</body>
+</html>

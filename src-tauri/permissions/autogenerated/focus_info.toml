@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-focus-info"
+description = "Enables the focus_info command without any pre-configured scope."
+commands.allow = ["focus_info"]
+
+[[permission]]
+identifier = "deny-focus-info"
+description = "Denies the focus_info command without any pre-configured scope."
+commands.deny = ["focus_info"]

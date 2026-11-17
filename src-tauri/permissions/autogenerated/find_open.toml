@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-find-open"
+description = "Enables the find_open command without any pre-configured scope."
+commands.allow = ["find_open"]
+
+[[permission]]
+identifier = "deny-find-open"
+description = "Denies the find_open command without any pre-configured scope."
+commands.deny = ["find_open"]

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Assistant</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="newtab.css">
+<script src="common.js"></script>
+<style>
+  /* en-tête du panneau IA : même couleur que le haut de la page de l'IA (style Corrtex),
+     pour qu'aucune séparation ne soit visible entre les deux */
+  html, body { height: 100%; overflow: hidden; background: transparent; }
+  body {
+    position: relative; padding: 12px 10px 0 14px; display: flex; flex-direction: column; gap: 10px;
+    background: var(--page-1);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  /* coin arrondi en haut à gauche (couleur de la barre d'outils), comme le coin de la page */
+  html::before { content: ""; position: fixed; left: 0; top: 0; width: 16px; height: 16px; z-index: 5; pointer-events: none;
+    background: radial-gradient(circle at 100% 100%, transparent 15.5px, var(--tool) 16px); }
+  .top { display: flex; align-items: center; gap: 8px; }
+  .top h2 { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 9px; }
+  .top h2 svg { width: 19px; height: 19px; color: var(--l1, #ff4f7b); stroke-width: 1.8; }
+  .round-btn.small.on { background: var(--fg); color: var(--page-2); border-color: var(--fg); }
+  .row { display: flex; align-items: center; gap: 6px; padding-bottom: 10px; }
+  .chips { flex-wrap: nowrap; gap: 6px; }
+  .chip { height: 30px; padding: 0 12px; font-size: 12.5px; flex: none; }
+
+  /* proposition : rechercher sur la page ouverte */
+  #ask {
+    margin-left: auto; height: 30px; display: flex; align-items: center; gap: 7px; padding: 0 12px 0 8px;
+    border-radius: 15px; font-size: 12.5px; font-weight: 600; white-space: nowrap; max-width: 150px;
+    background: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.05));
+    border: 1px solid color-mix(in srgb, var(--l1, #ff4f7b) 55%, var(--glass-border));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 0 14px color-mix(in srgb, var(--l1, #ff4f7b) 25%, transparent);
+  }
+  #ask[hidden] { display: none; }
+  #ask:hover { background: linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08)); }
+  #ask img { width: 16px; height: 16px; border-radius: 4px; flex: none; }
+  #ask span { overflow: hidden; text-overflow: ellipsis; }
+  #ask.pulse { animation: pulse 1.4s ease-in-out 3; }
+  .round-btn.small:disabled { opacity: .35; pointer-events: none; }
+  .round-btn.small.busy svg { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .shake { animation: shake .35s; }
+  @keyframes shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+
+  /* comparer des onglets : la liste se déplie sous l'en-tête */
+  #cmp { display: flex; flex-direction: column; gap: 8px; padding: 2px 4px 12px 0; }
+  #cmp[hidden] { display: none; }
+  #cmp .head { font-size: 12.5px; color: var(--fg-dim); display: flex; justify-content: space-between; }
+  #cmp-list { display: flex; flex-direction: column; gap: 2px; border-radius: 14px; overflow-y: auto; max-height: 220px; }
+  #cmp-list::-webkit-scrollbar { width: 0; }
+  .ct { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 6px 12px; background: var(--glass); text-align: left; font-size: 13px; }
+  .ct:hover { background: var(--hover); }
+  .ct img { width: 16px; height: 16px; border-radius: 4px; flex: none; }
+  .ct span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ct i { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--glass-border); flex: none; display: grid; place-items: center; font-style: normal; font-size: 11px; font-weight: 700; }
+  .ct.sel i { background: var(--l1, #ff4f7b); border-color: var(--l1, #ff4f7b); color: #fff; }
+  .ct.off { opacity: .4; pointer-events: none; }
+  #cmp .foot { display: flex; justify-content: flex-end; gap: 6px; }
+  #cmp .empty { font-size: 12.5px; color: var(--fg-dim); padding: 6px 2px; }
+  #cmp-go:disabled { opacity: .4; pointer-events: none; }
+  /* agent : l'objectif se tape sous l'en-tête */
+  #agent { display: flex; flex-direction: column; gap: 8px; padding: 2px 4px 12px 0; }
+  #agent[hidden] { display: none; }
+  #agent .head { font-size: 12.5px; color: var(--fg-dim); }
+  #agent textarea { resize: none; font: inherit; font-size: 13.5px; color: var(--fg); padding: 10px 12px; border-radius: 14px; outline: 0;
+    background: var(--glass); border: 1px solid var(--glass-border); }
+  #agent textarea:focus { border-color: color-mix(in srgb, var(--l1, #ff4f7b) 60%, var(--glass-border)); }
+  #agent .ex { display: flex; flex-wrap: wrap; gap: 6px; }
+  #agent .ex button { height: 26px; padding: 0 10px; border-radius: 13px; font-size: 12px; background: var(--glass); border: 1px solid var(--glass-border); color: var(--fg-dim); }
+  #agent .ex button:hover { color: var(--fg); background: var(--hover); }
+  #agent .foot { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+  #agent .note { flex: 1; font-size: 11.5px; color: var(--fg-dim); line-height: 1.3; }
+  #agent-go:disabled { opacity: .4; pointer-events: none; }
+  @keyframes pulse { 50% { box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 0 0 5px color-mix(in srgb, var(--l1, #ff4f7b) 25%, transparent); } }
+</style>
+</head>
+<body>
+  <div class="top">
+    <h2><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>Assistant IA</h2>
+    <button id="sum" class="round-btn small" title="Résumer la page ouverte">
+      <svg viewBox="0 0 24 24"><path d="M6 4.5h8l4 4v11H6z"/><path d="M14 4.5v4h4M9 12.5h6M9 15.5h4"/></svg>
+    </button>
+    <button id="cmp-btn" class="round-btn small" title="Comparer des onglets">
+      <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="7" height="14" rx="1.5"/><rect x="13.5" y="5" width="7" height="14" rx="1.5"/><path d="M5.8 9h2.4M15.8 9h2.4M5.8 12h2.4M15.8 12h2.4"/></svg>
+    </button>
+    <button id="agent-btn" class="round-btn small" title="Agent : l’IA agit sur la page pour vous (chaque action est validée par vous)">
+      <svg viewBox="0 0 24 24"><path d="M5 4.5l5.5 14 2-5.8 5.8-2z"/><path d="M13 13l5.5 5.5"/><path d="M18.5 3.5v3M17 5h3"/></svg>
+    </button>
+    <button id="skin" class="round-btn small" title="Style Corrtex sur la page de l'IA">
+      <svg viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.1 0 1.7-.9 1.4-1.9-.3-1 .4-2 1.5-2h2a3.6 3.6 0 0 0 3.6-3.6c0-5.3-3.8-9.5-8.5-9.5z"/><circle cx="7.8" cy="11" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="15" cy="7.8" r="1"/></svg>
+    </button>
+    <button id="reload" class="round-btn small" title="Recharger">
+      <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+    </button>
+    <button id="close" class="round-btn small" title="Fermer le panneau">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="row">
+    <div id="providers" class="chips"></div>
+    <button id="ask" hidden><img alt=""><span>Cette page</span></button>
+  </div>
+  <div id="cmp" hidden>
+    <div class="head"><span>Choisissez 2 ou 3 onglets à comparer</span><span id="cmp-count"></span></div>
+    <div id="cmp-list"></div>
+    <div class="foot">
+      <button id="cmp-cancel" class="chip">Annuler</button>
+      <button id="cmp-go" class="chip sel" disabled>Comparer</button>
+    </div>
+  </div>
+
+  <div id="agent" hidden>
+    <div class="head"><span>Que dois-je faire sur la page ?</span></div>
+    <textarea id="agent-goal" rows="2" maxlength="500" placeholder="Ex. : trouve le moins cher de ces casques et ouvre sa fiche"></textarea>
+    <div class="ex" id="agent-ex"></div>
+    <div class="foot">
+      <span class="note">Vous validez chaque action. L’agent ne saisit jamais de mot de passe ni de paiement.</span>
+      <button id="agent-cancel" class="chip">Annuler</button>
+      <button id="agent-go" class="chip sel" disabled>Lancer</button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const C = window.Corrtex;
+      const box = document.getElementById('providers');
+      const ask = document.getElementById('ask');
+      let current = '';
+      let lastUrl = null;
+
+      function render(s) {
+        if (!s || (s.win && s.win !== C.win())) return;
+        current = s.ai_provider;
+        document.getElementById('skin').classList.toggle('on', s.ai_skin !== false);
+        box.replaceChildren();
+        for (const p of s.providers || []) {
+          const b = document.createElement('button');
+          b.className = 'chip' + (p.id === current ? ' sel' : '');
+          b.textContent = p.name;
+          b.onclick = () => C.invoke('set_ai_provider', { id: p.id });
+          box.appendChild(b);
+        }
+        // hors de la page d'accueil : on propose une recherche IA sur le site ouvert
+        const tab = (s.tabs || []).find((t) => t.id === s.active);
+        const url = tab && tab.url ? tab.url : '';
+        ask.hidden = !url;
+        if (url) {
+          const host = C.hostOf(url);
+          ask.title = 'Rechercher avec l’IA sur cette page (' + host + ')';
+          ask.querySelector('img').src = tab.favicon || C.favicon(url);
+          ask.querySelector('img').onerror = function () { this.style.display = 'none'; };
+          ask.querySelector('img').style.display = '';
+          if (url !== lastUrl && s.sidebar_open) { ask.classList.remove('pulse'); void ask.offsetWidth; ask.classList.add('pulse'); }
+        }
+        lastUrl = url;
+      }
+
+      // couleurs du thème Corrtex transmises à la page de l'IA
+      function sendTheme() {
+        document.documentElement.style.setProperty('--l1', C.prefs().light || '#ff4f7b');
+        C.sendTheme();
+      }
+
+      ask.addEventListener('click', () => { ask.classList.remove('pulse'); C.invoke('ai_ask_page'); });
+
+      // ---------------------------------------------------------------- résumer la page
+      const sum = document.getElementById('sum');
+      function flash(el) { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); }
+      sum.addEventListener('click', () => {
+        sum.classList.add('busy');
+        C.invoke('ai_summarize').catch(() => flash(sum)).finally(() => setTimeout(() => sum.classList.remove('busy'), 1200));
+      });
+
+      // ---------------------------------------------------------------- comparer des onglets
+      const cmp = document.getElementById('cmp'), cmpList = document.getElementById('cmp-list');
+      const cmpBtn = document.getElementById('cmp-btn'), cmpGo = document.getElementById('cmp-go');
+      let picked = [], lastState = null;
+      function fit() {
+        // l'en-tête grandit juste assez pour montrer la liste
+        const open = !cmp.hidden ? cmp : !agentBox.hidden ? agentBox : null;
+        const extra = open ? Math.ceil(open.getBoundingClientRect().height) + 4 : 0;
+        C.invoke('set_aibar_extra', { extra });
+      }
+      function renderCmp() {
+        if (cmp.hidden || !lastState) return;
+        const tabs = (lastState.tabs || []).filter((t) => t.url);
+        picked = picked.filter((id) => tabs.some((t) => t.id === id));
+        cmpList.replaceChildren();
+        if (tabs.length < 2) {
+          const p = document.createElement('div');
+          p.className = 'empty';
+          p.textContent = 'Ouvrez au moins deux pages web pour pouvoir les comparer.';
+          cmpList.appendChild(p);
+        }
+        for (const t of tabs) {
+          const b = document.createElement('button');
+          const n = picked.indexOf(t.id);
+          b.className = 'ct' + (n >= 0 ? ' sel' : '') + (n < 0 && picked.length >= 3 ? ' off' : '');
+          const img = document.createElement('img');
+          img.src = t.favicon || C.favicon(t.url);
+          img.onerror = function () { this.style.visibility = 'hidden'; };
+          const sp = document.createElement('span');
+          sp.textContent = t.title || C.hostOf(t.url);
+          const i = document.createElement('i');
+          i.textContent = n >= 0 ? String(n + 1) : '';
+          b.append(img, sp, i);
+          b.onclick = () => {
+            const k = picked.indexOf(t.id);
+            if (k >= 0) picked.splice(k, 1); else if (picked.length < 3) picked.push(t.id);
+            renderCmp();
+          };
+          cmpList.appendChild(b);
+        }
+        document.getElementById('cmp-count').textContent = picked.length ? picked.length + ' / 3' : '';
+        cmpGo.disabled = picked.length < 2;
+        requestAnimationFrame(fit);
+      }
+      function toggleCmp(show) {
+        if (show) toggleAgent(false);
+        cmp.hidden = !show;
+        cmpBtn.classList.toggle('on', show);
+        if (show) {
+          // l'onglet ouvert est pré-sélectionné
+          const cur = lastState && (lastState.tabs || []).find((t) => t.id === lastState.active && t.url);
+          picked = cur ? [cur.id] : [];
+          renderCmp();
+        } else fit();
+      }
+      cmpBtn.addEventListener('click', () => toggleCmp(cmp.hidden));
+      document.getElementById('cmp-cancel').addEventListener('click', () => toggleCmp(false));
+      cmpGo.addEventListener('click', () => {
+        const ids = picked.slice();
+        toggleCmp(false);
+        cmpBtn.classList.add('busy');
+        C.invoke('ai_compare', { ids }).catch(() => flash(cmpBtn)).finally(() => setTimeout(() => cmpBtn.classList.remove('busy'), 1200));
+      });
+      // ---------------------------------------------------------------- agent
+      const agentBox = document.getElementById('agent'), agentBtn = document.getElementById('agent-btn');
+      const goal = document.getElementById('agent-goal'), agentGo = document.getElementById('agent-go');
+      const EX = ['Résume les avis de ce produit', 'Trouve le prix le plus bas', 'Remplis la recherche avec Paris, 2 personnes', 'Trouve la page de contact'];
+      for (const t of EX) {
+        const b = document.createElement('button');
+        b.textContent = t;
+        b.onclick = () => { goal.value = t; agentGo.disabled = false; goal.focus(); };
+        document.getElementById('agent-ex').appendChild(b);
+      }
+      function toggleAgent(show) {
+        if (show && !cmp.hidden) { cmp.hidden = true; cmpBtn.classList.remove('on'); }
+        agentBox.hidden = !show;
+        agentBtn.classList.toggle('on', show);
+        requestAnimationFrame(fit);
+        if (show) setTimeout(() => goal.focus(), 60);
+      }
+      agentBtn.addEventListener('click', () => toggleAgent(agentBox.hidden));
+      document.getElementById('agent-cancel').addEventListener('click', () => toggleAgent(false));
+      goal.addEventListener('input', () => { agentGo.disabled = !goal.value.trim(); });
+      const launch = () => {
+        const g = goal.value.trim();
+        if (!g) return;
+        C.invoke('agent_start', { goal: g }).then(() => { goal.value = ''; agentGo.disabled = true; toggleAgent(false); });
+      };
+      goal.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); launch(); } if (e.key === 'Escape') toggleAgent(false); });
+      agentGo.addEventListener('click', launch);
+      C.listen('agent-open', (p) => { if (!p || p.win === C.win()) toggleAgent(true); });
+
+      C.listen('browser-state', (s) => {
+        if (!s || (s.win && s.win !== C.win())) return;
+        lastState = s;
+        const tab = (s.tabs || []).find((t) => t.id === s.active);
+        sum.disabled = !(tab && tab.url);
+        renderCmp();
+      });
+      C.invoke('get_state').then((s) => { lastState = s; const tab = s && (s.tabs || []).find((t) => t.id === s.active); sum.disabled = !(tab && tab.url); });
+      document.getElementById('skin').addEventListener('click', () => C.invoke('toggle_ai_skin'));
+      document.getElementById('reload').addEventListener('click', () => C.invoke('set_ai_provider', { id: current }));
+      document.getElementById('close').addEventListener('click', () => C.invoke('toggle_sidebar'));
+      document.addEventListener('contextmenu', (e) => e.preventDefault());
+      window.addEventListener('corrtex-prefs', sendTheme);
+      C.listen('browser-state', render);
+      C.invoke('get_state').then(render);
+      sendTheme();
+    })();
+  </script>
+</body>
+</html>

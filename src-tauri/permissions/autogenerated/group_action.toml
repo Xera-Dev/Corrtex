@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-group-action"
+description = "Enables the group_action command without any pre-configured scope."
+commands.allow = ["group_action"]
+
+[[permission]]
+identifier = "deny-group-action"
+description = "Denies the group_action command without any pre-configured scope."
+commands.deny = ["group_action"]

@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Comparateur de prix</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="newtab.css">
+<link rel="stylesheet" href="ambient.css">
+<script src="common.js"></script>
+<script src="ambient.js"></script>
+<script src="shop-parse.js"></script>
+<style>
+  /* panneau latéral du comparateur, même style que les réglages ; vue opaque (Windows) */
+  /* verre liquide : les lumières animées de Corrtex derrière une carte floutée, comme les réglages */
+  html, body { background: linear-gradient(180deg, var(--page-1), var(--page-2)) !important; overflow: hidden; }
+  body { padding: 0; }
+  #ambient { position: fixed; inset: 0; z-index: 0; }
+  .drawer {
+    position: relative; z-index: 1; transform: none; width: auto; height: 100vh; border-radius: 0; visibility: visible; overflow-y: auto;
+    background: var(--card); backdrop-filter: blur(34px) saturate(1.5); -webkit-backdrop-filter: blur(34px) saturate(1.5);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.14); border: 1px solid var(--glass-border);
+    animation: pop .2s ease-out;
+  }
+  @keyframes pop { from { opacity: 0; transform: translateX(10px); } }
+  .drawer header .acts { display: flex; gap: 6px; }
+  h2 small { display: block; font-size: 12.5px; font-weight: 400; color: var(--fg-dim); margin-top: 2px; }
+  .group > h3 { display: flex; align-items: center; gap: 8px; }
+  .group > h3 .n { font-weight: 400; color: var(--fg-dim); }
+  .group > h3 .grow { flex: 1; }
+
+  /* l'article de la page */
+  .prod { display: flex; gap: 12px; align-items: center; padding: 12px; border-radius: 16px; background: var(--glass); margin-top: 4px; }
+  .prod img { width: 56px; height: 56px; border-radius: 12px; object-fit: contain; background: #fff; flex: none; }
+  .prod .ph { width: 56px; height: 56px; border-radius: 12px; background: var(--hover); flex: none; }
+  .prod .t { font-size: 13.5px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .prod .s { font-size: 12.5px; color: var(--fg-dim); margin-top: 4px; }
+  .prod .s b { color: var(--fg); }
+
+  /* verdict */
+  .verdict { margin-top: 12px; padding: 16px; border-radius: 18px; position: relative; overflow: hidden;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--l1, #ff4f7b) 26%, var(--glass)), var(--glass));
+    border: 1px solid color-mix(in srgb, var(--l1, #ff4f7b) 45%, var(--glass-border)); }
+  .verdict.good { background: linear-gradient(135deg, rgba(76, 200, 130, .24), var(--glass)); border-color: rgba(76, 200, 130, .5); }
+  .verdict .lbl { font-size: 12px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+  .verdict .big { font-size: 30px; font-weight: 700; margin: 2px 0 2px; letter-spacing: -.5px; }
+  .verdict .big small { font-size: 14px; font-weight: 500; color: var(--fg-dim); margin-left: 6px; letter-spacing: 0; }
+  .verdict .msg { font-size: 13.5px; }
+  .verdict .msg b { font-weight: 700; }
+  .verdict .row { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .tag { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 13px; font-size: 12px; font-weight: 600; background: var(--glass); border: 1px solid var(--glass-border); }
+  .tag.good { color: #5fd696; border-color: rgba(95, 214, 150, .45); }
+  .tag.warn { color: #ffb05c; border-color: rgba(255, 176, 92, .45); }
+  .tag svg { width: 13px; height: 13px; }
+  .btn { height: 36px; padding: 0 16px; border-radius: 18px; font-weight: 600; font-size: 13px; display: inline-flex; align-items: center; gap: 7px;
+    background: var(--fg); color: var(--page-2); border: 0; }
+  .btn:hover { filter: brightness(.92); }
+  .btn svg { width: 15px; height: 15px; }
+  .btn.ghost { background: var(--glass); color: var(--fg); border: 1px solid var(--glass-border); }
+  .btn.ghost:hover { background: var(--hover); filter: none; }
+
+  /* graphique */
+  .chart { position: relative; margin-top: 12px; padding: 12px 12px 8px; border-radius: 16px; background: var(--glass); }
+  .chart svg { display: block; width: 100%; height: 170px; overflow: visible; }
+  .chart .grid { stroke: var(--hover); stroke-width: 1; }
+  .chart svg text { stroke: none; }
+  .chart .axis { fill: var(--fg-dim); font-size: 10.5px; }
+  .chart .line { fill: none; stroke: var(--l1, #ff4f7b); stroke-width: 2.2; stroke-linejoin: round; }
+  .chart .site { stroke: var(--fg-dim); stroke-width: 1.2; stroke-dasharray: 4 4; }
+  .chart .site-l { fill: var(--fg-dim); font-size: 10.5px; }
+  .chart .dot { fill: var(--l1, #ff4f7b); stroke: var(--card-solid); stroke-width: 2; }
+  .chart .cursor { stroke: var(--fg-dim); stroke-width: 1; opacity: .5; }
+  .tip { position: absolute; pointer-events: none; padding: 6px 10px; border-radius: 10px; font-size: 12px; white-space: nowrap;
+    background: var(--card-solid); border: 1px solid var(--glass-border); box-shadow: 0 6px 18px rgba(0,0,0,.3); transform: translate(-50%, -110%); display: none; }
+  .tip b { font-size: 13px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+  .stat { padding: 9px 10px; border-radius: 12px; background: var(--glass); }
+  .stat .k { font-size: 11.5px; color: var(--fg-dim); }
+  .stat .v { font-size: 14.5px; font-weight: 700; margin-top: 2px; }
+  .chips.small .chip { height: 28px; padding: 0 11px; font-size: 12px; }
+
+  /* listes */
+  .row-link { min-height: 50px; }
+  .row-link .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .row-link .main b { font-weight: 600; font-size: 13.5px; }
+  .row-link .main i { font-style: normal; font-size: 12px; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-link .pr { flex: none; text-align: right; font-weight: 700; font-size: 14px; }
+  .row-link .pr s { display: block; font-weight: 400; font-size: 11.5px; color: var(--fg-dim); }
+  .row-link .pr em { display: block; font-style: normal; font-weight: 600; font-size: 11px; color: #5fd696; }
+  .row-link.best { background: color-mix(in srgb, var(--l1, #ff4f7b) 14%, var(--glass)); }
+  .row-link.sel { box-shadow: inset 3px 0 0 var(--l1, #ff4f7b); }
+  .thumb { width: 40px; height: 40px; border-radius: 10px; object-fit: contain; background: #fff; flex: none; }
+  .shopic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-weight: 700; font-size: 14px; background: var(--hover); flex: none; }
+  .match { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 9px; background: var(--hover); color: var(--fg-dim); }
+
+  /* codes promo */
+  .coupon { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; background: var(--glass); }
+  .coupon .top { display: flex; align-items: flex-start; gap: 10px; }
+  .coupon .badge { flex: none; max-width: 110px; padding: 4px 9px; border-radius: 9px; font-size: 11.5px; font-weight: 700; text-align: center; line-height: 1.2;
+    background: color-mix(in srgb, var(--l1, #ff4f7b) 22%, transparent); color: color-mix(in srgb, var(--l1, #ff4f7b) 55%, var(--fg)); }
+  .coupon .t { font-size: 13px; line-height: 1.35; flex: 1; }
+  .coupon .bot { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--fg-dim); }
+  .coupon .bot .ok { color: #5fd696; display: inline-flex; align-items: center; gap: 4px; }
+  .coupon .bot .ok svg { width: 12px; height: 12px; }
+  .coupon .code { margin-left: auto; height: 30px; padding: 0 12px; border-radius: 10px; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; font-weight: 700; letter-spacing: .5px;
+    border: 1.5px dashed color-mix(in srgb, var(--l1, #ff4f7b) 60%, var(--glass-border)); display: inline-flex; align-items: center; gap: 8px; }
+  .coupon .code:hover { background: var(--hover); }
+  .coupon .code span { font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; font-weight: 600; letter-spacing: 0; font-size: 11.5px; color: var(--fg-dim); }
+
+  /* états */
+  .wait { display: flex; align-items: center; gap: 10px; padding: 14px 4px; color: var(--fg-dim); font-size: 13px; }
+  .ring { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--hover); border-top-color: var(--l1, #ff4f7b); animation: spin .8s linear infinite; flex: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .skel { height: 120px; border-radius: 16px; margin-top: 12px; background: linear-gradient(90deg, var(--glass) 25%, var(--hover) 50%, var(--glass) 75%); background-size: 200% 100%; animation: sk 1.3s linear infinite; }
+  @keyframes sk { to { background-position: -200% 0; } }
+  .empty { text-align: center; padding: 50px 20px; color: var(--fg-dim); }
+  .empty svg { width: 42px; height: 42px; opacity: .5; margin-bottom: 12px; }
+  .note { font-size: 12.5px; color: var(--fg-dim); margin-top: 10px; }
+  .src { font-size: 11.5px; color: var(--fg-dim); padding: 14px 2px 22px; line-height: 1.5; }
+  .src a { color: inherit; }
+  .more { width: 100%; justify-content: center; margin-top: 8px; }
+  [hidden] { display: none !important; }
+  .advice { margin-top: 10px; padding: 14px 16px; border-radius: 16px; background: var(--glass); border: 1px solid var(--glass-border); font-size: 13.5px; line-height: 1.5; user-select: text; }
+  .advice .hd { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 8px; }
+  .advice .hd svg { width: 15px; height: 15px; color: var(--l1, #ff4f7b); filter: drop-shadow(0 0 4px var(--l1, #ff4f7b)); }
+  .advice p { margin: 0 0 7px; }
+  .advice ul { margin: 0 0 7px 18px; padding: 0; }
+  .advice li { margin: 3px 0; }
+  .advice .err { color: var(--fg-dim); }
+  .verdict .big small.here { color: #5fd696; font-weight: 600; }
+</style>
+</head>
+<body>
+  <section class="drawer open">
+    <header>
+      <h2>Comparateur<small id="sub">Meilleurs prix, historique et codes promo</small></h2>
+      <div class="acts">
+        <button id="refresh" class="round-btn small" title="Actualiser"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+        <button id="close" class="round-btn small" title="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+    </header>
+    <div id="body"></div>
+  </section>
+
+  <script>
+  (function () {
+    const C = window.Corrtex, S = window.CorrtexShop;
+    const $ = (id) => document.getElementById(id);
+    const body = $('body');
+    const ICON = {
+      ext: '<svg viewBox="0 0 24 24"><path d="M14 4.5h5.5V10M19.5 4.5L11 13M17 14v5.5H4.5V7H10"/></svg>',
+      down: '<svg viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg>',
+      up: '<svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
+      check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+      tag: '<svg viewBox="0 0 24 24"><path d="M3.5 12.5V4.5h8l9 9-8 8z"/><circle cx="8" cy="9" r="1.3"/></svg>',
+      chart: '<svg viewBox="0 0 24 24"><path d="M4 19.5h16M7 16V11M12 16V6.5M17 16v-6"/></svg>',
+      spark: '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:none"><path d="M12 2.5c.5 4.7 2.8 7 7.5 7.5-4.7.5-7 2.8-7.5 7.5-.5-4.7-2.8-7-7.5-7.5 4.7-.5 7-2.8 7.5-7.5z"/></svg>',
+      copy: '<svg viewBox="0 0 24 24"><path d="M9 9.5h9.5v10H9zM15 9.5V5.5a1 1 0 0 0-1-1H5.5a1 1 0 0 0-1 1V14a1 1 0 0 0 1 1H9"/></svg>'
+    };
+    const eur = (n) => n == null ? '—' : n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
+    const day = (t) => new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    function el(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+    function text(tag, cls, t) { const e = el(tag, cls); e.textContent = t; return e; }
+    const open = (url) => C.invoke('new_tab', { url });
+    const fetchPage = (url) => window.__TAURI__.core.invoke('shop_fetch', { url });
+    const close = () => C.invoke('close_panel');
+    $('close').onclick = close;
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+    let ctx = null, info = null, run = 0, range = 30, found = [], current = null, product = null, coupons = null, slug = '';
+
+    // ---------------------------------------------------------------- squelette
+    function skeleton() {
+      body.replaceChildren();
+      const g0 = el('div', 'group');
+      const pr = el('div', 'prod');
+      if (info.image) { const im = el('img'); im.src = info.image; im.onerror = () => im.replaceWith(el('div', 'ph')); pr.append(im); } else pr.append(el('div', 'ph'));
+      const tx = el('div');
+      tx.append(text('div', 't', info.name));
+      const s = el('div', 's');
+      s.append(document.createTextNode('Sur ' + info.site + ' : '));
+      s.append(text('b', '', info.price ? eur(info.price) : 'prix non détecté'));
+      tx.append(s);
+      pr.append(tx);
+      g0.append(pr);
+      const v = el('div'); v.id = 'verdict'; v.append(el('div', 'skel'));
+      g0.append(v);
+      const gH = el('div', 'group'); gH.id = 'g-hist';
+      gH.append(el('h3', '', 'Évolution du prix'), el('div', 'skel'));
+      const gO = el('div', 'group'); gO.id = 'g-offers';
+      gO.append(el('h3', '', 'Offres des marchands'), waitRow('Recherche des meilleures offres…'));
+      const gF = el('div', 'group'); gF.id = 'g-found';
+      gF.append(el('h3', '', 'Produits trouvés'), waitRow('Recherche sur le comparateur…'));
+      const gC = el('div', 'group'); gC.id = 'g-coupons';
+      gC.append(el('h3', '', 'Codes promo pour ' + info.site), waitRow('Recherche de codes de réduction…'));
+      const gA = el('div', 'group'); gA.id = 'g-ai';
+      body.append(g0, gH, gO, gF, gC, gA, el('div', 'src', 'Prix et historique : <a href="#" id="src1">leDénicheur</a> · Codes promo : <a href="#" id="src2">Dealabs</a>. Les prix peuvent varier ; vérifiez sur le site du marchand.'));
+      $('src1').onclick = (e) => { e.preventDefault(); open(current ? current.url : 'https://ledenicheur.fr/search?query=' + encodeURIComponent(S.query(info))); };
+      $('src2').onclick = (e) => { e.preventDefault(); open('https://www.dealabs.com/codes-promo/' + slug); };
+    }
+    function waitRow(t) { const w = el('div', 'wait'); w.append(el('div', 'ring'), text('span', '', t)); return w; }
+    function replaceBody(id, title, nodes) {
+      const g = $(id);
+      if (!g) return;
+      g.replaceChildren(typeof title === 'string' ? el('h3', '', title) : title, ...nodes);
+    }
+    function emptyState(msg, sub) {
+      body.replaceChildren();
+      const e = el('div', 'empty', ICON.chart);
+      e.append(text('div', '', msg));
+      if (sub) { const s = text('div', 'note', sub); e.append(s); }
+      body.append(e);
+    }
+
+    // ---------------------------------------------------------------- démarrage
+    async function load(force) {
+      const my = ++run;
+      ctx = await C.invoke('shop_context');
+      if (my !== run) return;
+      const p = ctx && ctx.product;
+      if (!p || !p.name) {
+        info = null;
+        $('sub').textContent = 'Meilleurs prix, historique et codes promo';
+        emptyState('Aucun article en vente détecté sur cette page.', 'Ouvrez la fiche d’un produit sur un site marchand (Fnac, Amazon, Boulanger…) puis cliquez sur « Comparer les prix ».');
+        return;
+      }
+      if (!force && info && info.name === p.name && info.url === p.url) return;
+      info = p;
+      $('sub').textContent = info.site;
+      slug = siteSlug(info.site);
+      found = []; current = null; product = null; coupons = null;
+      skeleton();
+      loadCoupons(my);
+      try {
+        found = await searchProducts(info);
+      } catch (e) {
+        if (my !== run) return;
+        failAll(String(e));
+        return;
+      }
+      if (my !== run) return;
+      renderFound();
+      if (!found.length) {
+        replaceBody('verdict', el('div'), [noteBox('Ce produit n’a pas été trouvé sur le comparateur.')]);
+        replaceBody('g-hist', 'Évolution du prix', [text('div', 'note', 'Pas d’historique disponible.')]);
+        replaceBody('g-offers', 'Offres des marchands', [text('div', 'note', 'Aucune offre trouvée.')]);
+        renderAI();
+        return;
+      }
+      select(found[0], my);
+    }
+    function failAll(msg) {
+      const m = /refusé|introuvable/.test(msg) ? 'Le comparateur n’a pas répondu (' + msg + ').' : 'Le comparateur est injoignable pour le moment.';
+      replaceBody('verdict', el('div'), [noteBox(m)]);
+      replaceBody('g-hist', 'Évolution du prix', [text('div', 'note', 'Indisponible.')]);
+      replaceBody('g-offers', 'Offres des marchands', [text('div', 'note', 'Indisponible.')]);
+      replaceBody('g-found', 'Produits trouvés', [text('div', 'note', 'Indisponible.')]);
+    }
+    function noteBox(t) { const d = el('div', 'verdict'); d.append(text('div', 'msg', t)); return d; }
+    $('refresh').onclick = () => load(true);
+    C.listen('shop-changed', () => load(false));
+    let lastActive = null;
+    // changement d'onglet : le panneau suit l'article de l'onglet actif
+    C.listen('browser-state', (s) => {
+      if (!s || (s.win && s.win !== C.win())) return;
+      const act = s.active != null ? s.active : null;
+      if (lastActive !== null && act !== lastActive) load(false);
+      lastActive = act;
+    });
+
+    // ---------------------------------------------------------------- recherche du produit
+    async function searchProducts(info) {
+      const lists = [];
+      if (info.gtin && info.gtin.length >= 8) {
+        try { lists.push(S.parseSearch(await fetchPage('https://ledenicheur.fr/search?query=' + info.gtin)).map((r) => Object.assign(r, { byGtin: true }))); } catch (e) {}
+      }
+      const q = S.query(info);
+      lists.push(S.parseSearch(await fetchPage('https://ledenicheur.fr/search?query=' + encodeURIComponent(q))));
+      const seen = new Set(), out = [];
+      lists.flat().forEach((r) => {
+        if (seen.has(r.id)) return;
+        seen.add(r.id);
+        r.score = S.score(info.name, r.name) + (r.byGtin ? 1 : 0);
+        out.push(r);
+      });
+      // le plus ressemblant d'abord ; à ressemblance égale, le moins cher
+      out.sort((a, b) => (b.score - a.score) || ((a.price || 1e9) - (b.price || 1e9)));
+      return out;
+    }
+
+    function renderFound() {
+      if (!found.length) { replaceBody('g-found', 'Produits trouvés', [text('div', 'note', 'Aucun produit correspondant sur le comparateur.')]); return; }
+      const h = el('h3', '', 'Produits trouvés <span class="n">' + found.length + '</span>');
+      const list = el('div', 'list');
+      found.forEach((r) => {
+        const b = el('button', 'row-link' + (current && current.id === r.id ? ' sel' : ''));
+        const im = el('img', 'thumb'); im.src = r.image; im.onerror = () => { im.style.visibility = 'hidden'; };
+        const m = el('div', 'main');
+        const nm = text('b', '', r.name);
+        nm.style.cssText = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+        m.append(nm);
+        const sub = el('i');
+        const pct = Math.max(0, Math.min(100, Math.round(Math.min(r.score, 1) * 100)));
+        sub.textContent = (r.byGtin ? 'Même code EAN · ' : 'Ressemblance ' + pct + ' % · ') + (r.rating ? '★ ' + r.rating.toFixed(1) + ' (' + r.reviews + ' avis)' : 'pas d’avis');
+        m.append(sub);
+        const pr = el('div', 'pr');
+        pr.append(document.createTextNode(r.price ? 'dès ' + eur(r.price) : ''));
+        b.append(im, m, pr);
+        b.onclick = () => select(r, run);
+        list.append(b);
+      });
+      replaceBody('g-found', h, [list, text('div', 'note', 'Choisissez un autre produit si celui-ci ne correspond pas exactement.')]);
+    }
+
+    // ---------------------------------------------------------------- fiche produit sur le comparateur
+    async function select(r, my) {
+      current = r;
+      renderFound();
+      $('verdict').replaceChildren(el('div', 'skel'));
+      replaceBody('g-hist', 'Évolution du prix', [el('div', 'skel')]);
+      replaceBody('g-offers', 'Offres des marchands', [waitRow('Lecture des offres…')]);
+      try {
+        product = S.parseProduct(await fetchPage(r.url));
+      } catch (e) {
+        if (my !== run || current !== r) return;
+        replaceBody('verdict', el('div'), [noteBox('Impossible de lire la fiche du comparateur (' + e + ').')]);
+        replaceBody('g-hist', 'Évolution du prix', [text('div', 'note', 'Indisponible.')]);
+        replaceBody('g-offers', 'Offres des marchands', [text('div', 'note', 'Indisponible.')]);
+        return;
+      }
+      if (my !== run || current !== r) return;
+      renderVerdict();
+      renderHistory();
+      renderOffers();
+      renderAI();
+    }
+
+    function series(days) {
+      const h = product.history;
+      if (!h.length) return [];
+      const DAY = 864e5, now = Date.now();
+      const start = Math.max(now - days * DAY, h[0].t);
+      const out = [];
+      let i = 0, last = h[0];
+      for (let t = Math.floor(start / DAY) * DAY; t <= now; t += DAY) {
+        while (i < h.length && h[i].t <= t + DAY - 1) { last = h[i]; i++; }
+        if (last.t <= t + DAY - 1) out.push({ t, price: last.price, shop: last.shop });
+      }
+      return out;
+    }
+    function stats(days) {
+      const s = series(days);
+      if (!s.length) return null;
+      const p = s.map((x) => x.price);
+      return { min: Math.min.apply(null, p), max: Math.max.apply(null, p), avg: p.reduce((a, b) => a + b, 0) / p.length, last: p[p.length - 1], s };
+    }
+    function best() {
+      const o = product.offers[0];
+      const low = [product.low, o && o.price].filter((x) => x).sort((a, b) => a - b)[0] || null;
+      return { price: low, offer: o && o.price <= low + 0.01 ? o : null };
+    }
+
+    function renderVerdict() {
+      const v = $('verdict');
+      v.replaceChildren();
+      const b = best();
+      if (!b.price && !info.price) { v.append(noteBox('Aucun prix disponible pour ce produit sur le comparateur.')); return; }
+      const box = el('div', 'verdict');
+      const diff = info.price && b.price ? info.price - b.price : null;
+      const cheaper = diff != null && diff > Math.max(1, info.price * 0.01);
+      // la page est au meilleur prix (ou moins chère que le comparateur)
+      const siteBest = info.price && (!b.price || diff <= Math.max(1, info.price * 0.01));
+      const shown = siteBest ? info.price : b.price;
+      if (siteBest) box.classList.add('good');
+      box.append(text('div', 'lbl', siteBest ? 'Meilleur prix : cette page' : 'Meilleur prix trouvé'));
+      const big = el('div', 'big');
+      big.append(document.createTextNode(eur(shown)));
+      if (siteBest) big.append(text('small', 'here', 'ici, sur ' + info.site));
+      else if (b.offer) big.append(text('small', '', 'chez ' + b.offer.shop));
+      box.append(big);
+      const msg = el('div', 'msg');
+      if (diff == null && !info.price) msg.textContent = 'Le prix de ce site n’a pas été détecté : comparez avec le meilleur prix ci-dessus.';
+      else if (!b.price) msg.textContent = 'Aucune autre offre trouvée sur le comparateur.';
+      else if (cheaper) msg.innerHTML = 'Vous économisez <b>' + eur(diff) + '</b> (' + Math.round(diff / info.price * 100) + ' %) par rapport à ' + escapeHtml(info.site) + '.';
+      else if (diff < -0.5) msg.innerHTML = 'Aucune offre moins chère trouvée : la meilleure offre du comparateur est à <b>' + eur(b.price) + '</b>' + (b.offer ? ' chez ' + escapeHtml(b.offer.shop) : '') + ', soit <b>' + eur(-diff) + ' de plus</b>.';
+      else msg.innerHTML = 'Même prix que la meilleure offre du comparateur' + (b.offer ? ' (' + escapeHtml(b.offer.shop) + ')' : '') + '.';
+      box.append(msg);
+      const row = el('div', 'row');
+      const st = stats(90);
+      if (st && shown) {
+        let tag;
+        if (shown <= st.min * 1.02) tag = el('span', 'tag good', ICON.down + 'Au plus bas depuis 3 mois');
+        else if (shown >= st.avg * 1.08) tag = el('span', 'tag warn', ICON.up + 'Plus cher que d’habitude');
+        else tag = el('span', 'tag', 'Prix dans la moyenne');
+        row.append(tag);
+      }
+      if (cheaper && b.offer) {
+        const go = el('button', 'btn', ICON.ext + 'Voir l’offre');
+        go.style.marginLeft = 'auto';
+        go.onclick = () => open(b.offer.url);
+        row.append(go);
+      }
+      box.append(row);
+      v.append(box);
+    }
+    function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+    // ---------------------------------------------------------------- graphique
+    function renderHistory() {
+      if (!product.history.length) { replaceBody('g-hist', 'Évolution du prix', [text('div', 'note', 'Pas encore d’historique pour ce produit.')]); return; }
+      const h = el('h3');
+      h.append(text('span', 'grow', 'Évolution du prix'));
+      const chips = el('div', 'chips small');
+      [[7, '7 j'], [30, '30 j'], [90, '3 mois']].forEach(([d, l]) => {
+        const c = text('button', 'chip' + (range === d ? ' sel' : ''), l);
+        c.onclick = () => { range = d; renderHistory(); };
+        chips.append(c);
+      });
+      h.append(chips);
+      const st = stats(range);
+      const wrap = el('div', 'chart');
+      const tip = el('div', 'tip');
+      wrap.append(tip);
+      const grid = el('div', 'stats');
+      [['Plus bas', st.min], ['Moyen', st.avg], ['Plus haut', st.max]].forEach(([k, v]) => {
+        const s = el('div', 'stat'); s.append(text('div', 'k', k), text('div', 'v', eur(Math.round(v * 100) / 100))); grid.append(s);
+      });
+      const first = st.s[0].price, last = st.last, ch = last - first;
+      const trend = text('div', 'note', Math.abs(ch) < 0.5 ? 'Prix stable sur la période.' : (ch < 0 ? 'En baisse de ' : 'En hausse de ') + eur(Math.abs(ch)) + ' (' + Math.round(Math.abs(ch) / first * 100) + ' %) sur la période.');
+      replaceBody('g-hist', h, [wrap, grid, trend]);
+      // dessiné à la taille réelle du panneau (le texte n'est pas déformé)
+      wrap.prepend(drawChart(st.s, tip, Math.max(200, wrap.clientWidth - 24)));
+    }
+    let resizeT = 0;
+    window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (product && product.history.length) renderHistory(); }, 150); });
+    function drawChart(s, tip, W) {
+      const NS = 'http://www.w3.org/2000/svg';
+      const H = 170, L = 44, R = 8, T = 10, B = 22;
+      const svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+      svg.setAttribute('width', W);
+      svg.setAttribute('height', H);
+      const mk = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); svg.appendChild(e); return e; };
+      let lo = Math.min.apply(null, s.map((x) => x.price)), hi = Math.max.apply(null, s.map((x) => x.price));
+      const site = info.price && info.price < hi * 1.35 && info.price > lo * 0.7 ? info.price : null;
+      if (site) { lo = Math.min(lo, site); hi = Math.max(hi, site); }
+      const pad = Math.max((hi - lo) * 0.15, hi * 0.02, 1);
+      lo -= pad; hi += pad;
+      const x = (i) => L + (s.length < 2 ? (W - L - R) / 2 : i / (s.length - 1) * (W - L - R));
+      const y = (p) => T + (1 - (p - lo) / (hi - lo)) * (H - T - B);
+      // grille et axes
+      for (let k = 0; k <= 3; k++) {
+        const p = lo + (hi - lo) * k / 3, yy = y(p);
+        mk('line', { x1: L, x2: W - R, y1: yy, y2: yy, class: 'grid' });
+        const t = mk('text', { x: L - 6, y: yy + 3.5, 'text-anchor': 'end', class: 'axis' });
+        t.textContent = Math.round(p) + ' €';
+      }
+      [0, Math.floor((s.length - 1) / 2), s.length - 1].filter((v, i, a) => a.indexOf(v) === i).forEach((i) => {
+        const t = mk('text', { x: x(i), y: H - 5, 'text-anchor': i === 0 ? 'start' : i === s.length - 1 ? 'end' : 'middle', class: 'axis' });
+        t.textContent = day(s[i].t);
+      });
+      // aire et courbe en escalier (le prix le plus bas du jour)
+      const defs = mk('defs', {});
+      const grad = document.createElementNS(NS, 'linearGradient');
+      grad.setAttribute('id', 'ga'); grad.setAttribute('x1', 0); grad.setAttribute('x2', 0); grad.setAttribute('y1', 0); grad.setAttribute('y2', 1);
+      const s1 = document.createElementNS(NS, 'stop'); s1.setAttribute('offset', '0'); s1.setAttribute('stop-color', getComputedStyle(document.documentElement).getPropertyValue('--l1').trim() || '#ff4f7b'); s1.setAttribute('stop-opacity', '.35');
+      const s2 = document.createElementNS(NS, 'stop'); s2.setAttribute('offset', '1'); s2.setAttribute('stop-color', s1.getAttribute('stop-color')); s2.setAttribute('stop-opacity', '0');
+      grad.append(s1, s2); defs.appendChild(grad);
+      let d = '';
+      s.forEach((pt, i) => { d += (i ? ' H' + x(i).toFixed(1) + ' V' : 'M' + x(i).toFixed(1) + ' ') + y(pt.price).toFixed(1); });
+      if (s.length === 1) d += ' H' + (W - R);
+      mk('path', { d: d + ' V' + (H - B) + ' H' + x(0).toFixed(1) + ' Z', fill: 'url(#ga)', stroke: 'none' });
+      mk('path', { d, class: 'line' });
+      if (site) {
+        mk('line', { x1: L, x2: W - R, y1: y(site), y2: y(site), class: 'site' });
+        const t = mk('text', { x: W - R, y: y(site) - 4, 'text-anchor': 'end', class: 'site-l' });
+        t.textContent = info.site + ' · ' + eur(site);
+      }
+      const lastPt = s[s.length - 1];
+      mk('circle', { cx: x(s.length - 1), cy: y(lastPt.price), r: 4, class: 'dot' });
+      // survol : prix du jour
+      const cur = mk('line', { x1: 0, x2: 0, y1: T, y2: H - B, class: 'cursor', visibility: 'hidden' });
+      const dot = mk('circle', { r: 4, class: 'dot', visibility: 'hidden' });
+      svg.addEventListener('mousemove', (e) => {
+        const r = svg.getBoundingClientRect();
+        const vx = (e.clientX - r.left) / r.width * W;
+        const i = Math.max(0, Math.min(s.length - 1, Math.round((vx - L) / (W - L - R) * (s.length - 1))));
+        const px = x(i), py = y(s[i].price);
+        cur.setAttribute('x1', px); cur.setAttribute('x2', px); cur.setAttribute('visibility', 'visible');
+        dot.setAttribute('cx', px); dot.setAttribute('cy', py); dot.setAttribute('visibility', 'visible');
+        tip.style.display = 'block';
+        tip.style.left = (12 + px / W * r.width) + 'px';
+        tip.style.top = (12 + py / H * r.height) + 'px';
+        tip.innerHTML = '<b>' + eur(s[i].price) + '</b> · ' + day(s[i].t) + (s[i].shop ? '<br>' + escapeHtml(s[i].shop) : '');
+      });
+      svg.addEventListener('mouseleave', () => { cur.setAttribute('visibility', 'hidden'); dot.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; });
+      return svg;
+    }
+
+    // ---------------------------------------------------------------- offres
+    function renderOffers() {
+      const offers = product.offers;
+      if (!offers.length) {
+        const n = text('div', 'note', product.low ? 'Dès ' + eur(product.low) + ' chez ' + product.offerCount + ' marchands.' : 'Aucune offre trouvée.');
+        const b = el('button', 'btn ghost more', ICON.ext + 'Voir toutes les offres');
+        b.onclick = () => open(current.url);
+        replaceBody('g-offers', 'Offres des marchands', [n, b]);
+        return;
+      }
+      const h = el('h3', '', 'Offres des marchands <span class="n">' + (product.offerCount || offers.length) + '</span>');
+      const list = el('div', 'list');
+      offers.forEach((o, i) => {
+        const b = el('button', 'row-link' + (i === 0 ? ' best' : ''));
+        b.append(text('div', 'shopic', o.shop.charAt(0).toUpperCase()));
+        const m = el('div', 'main');
+        m.append(text('b', '', o.shop), text('i', '', (o.stock ? 'En stock · ' : '') + o.title));
+        const pr = el('div', 'pr');
+        if (o.was) pr.append(text('s', '', eur(o.was)));
+        pr.append(document.createTextNode(eur(o.price)));
+        if (info.price && info.price - o.price > 1) pr.append(text('em', '', '−' + eur(info.price - o.price)));
+        b.append(m, pr);
+        b.title = 'Ouvrir l’offre chez ' + o.shop;
+        b.onclick = () => open(o.url);
+        list.append(b);
+      });
+      const more = el('button', 'btn ghost more', ICON.ext + 'Toutes les offres sur le comparateur');
+      more.onclick = () => open(current.url + '#prices');
+      replaceBody('g-offers', h, [list, more]);
+    }
+
+    // ---------------------------------------------------------------- codes promo
+    function siteSlug(host) {
+      const parts = host.toLowerCase().replace(/^www\./, '').split('.');
+      if (parts.length >= 3 && /^(co|com)$/.test(parts[parts.length - 2])) return parts[parts.length - 3];
+      return parts.length >= 2 ? parts[parts.length - 2] : parts[0];
+    }
+    async function loadCoupons(my) {
+      let list = [];
+      try { list = S.parseCoupons(await fetchPage('https://www.dealabs.com/codes-promo/' + slug)); }
+      catch (e) { list = null; }
+      if (my !== run) return;
+      coupons = list;
+      renderCoupons();
+      renderAI();
+    }
+    function renderCoupons() {
+      const title = 'Codes promo pour ' + info.site;
+      if (coupons == null) { replaceBody('g-coupons', title, [text('div', 'note', 'Aucun code promo répertorié pour ce site.')]); return; }
+      if (!coupons.length) { replaceBody('g-coupons', title, [text('div', 'note', 'Aucun code promo en cours pour ce site.')]); return; }
+      const h = el('h3', '', escapeHtml(title) + ' <span class="n">' + coupons.length + '</span>');
+      const list = el('div', 'list');
+      let shown = 0;
+      const add = (c) => {
+        const box = el('div', 'coupon');
+        const top = el('div', 'top');
+        if (c.badge) top.append(text('div', 'badge', c.badge));
+        top.append(text('div', 't', c.title));
+        const bot = el('div', 'bot');
+        if (c.verified) bot.append(el('span', 'ok', ICON.check + 'Vérifié'));
+        if (c.end) bot.append(text('span', '', 'jusqu’au ' + day(c.end)));
+        if (c.code) {
+          const code = el('button', 'code');
+          code.title = 'Copier le code';
+          code.append(document.createTextNode(c.code));
+          const lab = text('span', '', 'Copier');
+          code.append(lab);
+          code.onclick = () => { try { navigator.clipboard.writeText(c.code); } catch (e) {} lab.textContent = 'Copié !'; setTimeout(() => { lab.textContent = 'Copier'; }, 1600); };
+          bot.append(code);
+        } else {
+          bot.append(text('span', '', '· offre sans code'));
+        }
+        box.title = c.terms;
+        box.append(top, bot);
+        list.append(box);
+      };
+      coupons.slice(0, 5).forEach(add); shown = Math.min(5, coupons.length);
+      const nodes = [list];
+      if (coupons.length > shown) {
+        const more = el('button', 'btn ghost more', 'Voir les ' + (coupons.length - shown) + ' autres');
+        more.onclick = () => { coupons.slice(shown).forEach(add); more.remove(); };
+        nodes.push(more);
+      }
+      replaceBody('g-coupons', h, nodes);
+    }
+
+    // ---------------------------------------------------------------- conseil de l'IA
+    let aiReq = '', aiBox = null;
+    function renderAI() {
+      const g = $('g-ai');
+      if (!g) return;
+      if (aiBox && aiBox.isConnected) return;
+      const b = el('button', 'btn ghost more', ICON.spark + 'Demander conseil à l’IA');
+      b.onclick = () => {
+        const lines = ['Je regarde cet article : « ' + info.name + ' » sur ' + info.site + (info.price ? ' à ' + eur(info.price) : '') + '.'];
+        if (product) {
+          const b2 = best();
+          if (b2.price) lines.push('Meilleur prix trouvé sur leDénicheur : ' + eur(b2.price) + (b2.offer ? ' chez ' + b2.offer.shop : '') + '.');
+          if (product.offers.length) lines.push('Offres : ' + product.offers.map((o) => o.shop + ' ' + eur(o.price) + (o.was ? ' (au lieu de ' + eur(o.was) + ')' : '')).join(' ; ') + '.');
+          const st = stats(90);
+          if (st) lines.push('Sur 3 mois, le prix le plus bas était ' + eur(st.min) + ', le moyen ' + eur(Math.round(st.avg)) + ' et le plus haut ' + eur(st.max) + '.');
+        }
+        if (found.length > 1) lines.push('Produits proches sur le comparateur : ' + found.slice(0, 5).map((r) => r.name + (r.price ? ' dès ' + eur(r.price) : '')).join(' ; ') + '.');
+        if (coupons && coupons.length) lines.push('Codes promo en cours sur ' + info.site + ' : ' + coupons.slice(0, 6).map((c) => (c.code ? c.code + ' : ' : '') + c.title).join(' ; ') + '.');
+        lines.push('\nEst-ce le bon moment pour acheter ? Quelle est la meilleure option en tenant compte des prix, de l’historique et des codes promo ? Réponds en français, en 5 lignes maximum, sans tableau, puis donne ton conseil final en une phrase.');
+        aiReq = 's' + Date.now().toString(36);
+        aiBox = el('div', 'advice');
+        aiBox.append(el('div', 'hd', ICON.spark + '<span>Conseil de l’IA</span>'), waitRow('L’IA analyse les prix…'));
+        g.append(aiBox);
+        b.disabled = true;
+        b.style.opacity = '.5';
+        C.invoke('shop_ask_ai', { prompt: lines.join('\n'), req: aiReq }).catch(() => showAdvice('', true));
+      };
+      g.replaceChildren(b);
+      aiBox = null;
+    }
+    // réponse de l'IA cachée, reçue au fil de l'écriture
+    window.__corrtexShopAI = function (id, txt, done, error) {
+      if (id !== aiReq || !aiBox) return;
+      if (!txt && !done) return;
+      showAdvice(txt, error && !txt, done);
+    };
+    function showAdvice(txt, failed, done) {
+      if (!aiBox) return;
+      const hd = aiBox.firstChild;
+      aiBox.replaceChildren(hd);
+      if (failed) { aiBox.append(text('p', 'err', 'L’IA n’a pas répondu. Vérifiez que vous êtes connecté à votre IA dans le panneau IA.')); return; }
+      aiBox.append(renderMd(txt));
+      if (!done) aiBox.append(waitRow('…'));
+    }
+    // mise en forme simple : paragraphes, listes, gras
+    function renderMd(src) {
+      const frag = document.createDocumentFragment();
+      let ul = null;
+      String(src).split(/\n+/).forEach((line) => {
+        const t = line.trim();
+        if (!t) return;
+        const li = t.match(/^([-*•]|\d+[.)])\s+(.*)$/);
+        const node = el(li ? 'li' : 'p');
+        node.innerHTML = escapeHtml(li ? li[2] : t.replace(/^#+\s*/, '')).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+        if (li) { if (!ul) { ul = el('ul'); frag.append(ul); } ul.append(node); }
+        else { ul = null; frag.append(node); }
+      });
+      return frag;
+    }
+
+    load(true);
+  })();
+  </script>
+</body>
+</html>

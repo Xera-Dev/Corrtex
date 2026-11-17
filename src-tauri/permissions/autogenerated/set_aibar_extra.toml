@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-aibar-extra"
+description = "Enables the set_aibar_extra command without any pre-configured scope."
+commands.allow = ["set_aibar_extra"]
+
+[[permission]]
+identifier = "deny-set-aibar-extra"
+description = "Denies the set_aibar_extra command without any pre-configured scope."
+commands.deny = ["set_aibar_extra"]

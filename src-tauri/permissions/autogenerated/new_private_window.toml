@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-new-private-window"
+description = "Enables the new_private_window command without any pre-configured scope."
+commands.allow = ["new_private_window"]
+
+[[permission]]
+identifier = "deny-new-private-window"
+description = "Denies the new_private_window command without any pre-configured scope."
+commands.deny = ["new_private_window"]

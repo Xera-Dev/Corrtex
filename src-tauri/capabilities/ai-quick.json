@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "ai-quick",
+  "description": "Page d'IA cachée des réponses rapides (bulle) : elle peut seulement renvoyer le texte de la réponse.",
+  "windows": [
+    "*"
+  ],
+  "webviews": [
+    "aiq-*"
+  ],
+  "remote": {
+    "urls": [
+      "https://claude.ai/*",
+      "https://chatgpt.com/*",
+      "https://gemini.google.com/*"
+    ]
+  },
+  "permissions": [
+    "allow-ai-quick-result"
+  ]
+}

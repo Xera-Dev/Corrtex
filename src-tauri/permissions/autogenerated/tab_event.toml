@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tab-event"
+description = "Enables the tab_event command without any pre-configured scope."
+commands.allow = ["tab_event"]
+
+[[permission]]
+identifier = "deny-tab-event"
+description = "Denies the tab_event command without any pre-configured scope."
+commands.deny = ["tab_event"]

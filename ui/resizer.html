@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Redimensionner</title>
+<link rel="stylesheet" href="theme.css">
+<script src="common.js"></script>
+<style>
+  /* poignée sur le bord gauche du panneau IA : glisser pour changer sa largeur */
+  /* gouttière de la couleur de la barre d'outils entre la page et le panneau IA */
+  html, body { margin: 0; height: 100%; background: var(--tool); overflow: hidden; }
+  body { cursor: ew-resize; display: flex; justify-content: center; }
+  .line { width: 2px; height: 100%; background: var(--l1, #ff4f7b); opacity: 0; transition: opacity .15s; }
+  .grip { position: absolute; top: 50%; left: 2px; width: 4px; height: 38px; margin-top: -19px; border-radius: 2px;
+    background: var(--fg); opacity: 0; transition: opacity .15s; }
+  body:hover .line, body.drag .line { opacity: 1; }
+  body:hover .grip, body.drag .grip { opacity: .7; }
+</style>
+</head>
+<body>
+  <div class="line"></div>
+  <div class="grip"></div>
+  <script>
+    (function () {
+      const C = window.Corrtex;
+      document.documentElement.style.setProperty('--l1', C.prefs().light || '#ff4f7b');
+      let width = 400, start = null, raf = 0, pending = null;
+      C.invoke('get_state').then((s) => { if (s && s.sidebar_w) width = s.sidebar_w; });
+      C.listen('browser-state', (s) => { if (s && s.win === C.win() && s.sidebar_w && !start) width = s.sidebar_w; });
+
+      function push(save) {
+        if (pending === null) return;
+        C.invoke('set_sidebar_width', { width: pending, save });
+      }
+      document.body.addEventListener('pointerdown', (e) => {
+        document.body.setPointerCapture(e.pointerId);
+        document.body.classList.add('drag');
+        start = { x: e.screenX, w: width };
+      });
+      document.body.addEventListener('pointermove', (e) => {
+        if (!start) return;
+        // le panneau est à droite : tirer vers la gauche l'élargit
+        pending = Math.round(start.w - (e.screenX - start.x));
+        if (!raf) raf = requestAnimationFrame(() => { raf = 0; push(false); });
+      });
+      const end = () => {
+        if (!start) return;
+        start = null;
+        document.body.classList.remove('drag');
+        push(true);
+        if (pending !== null) width = pending;
+        pending = null;
+      };
+      document.body.addEventListener('pointerup', end);
+      document.body.addEventListener('pointercancel', end);
+    })();
+  </script>
+</body>
+</html>

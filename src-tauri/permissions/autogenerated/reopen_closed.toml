@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reopen-closed"
+description = "Enables the reopen_closed command without any pre-configured scope."
+commands.allow = ["reopen_closed"]
+
+[[permission]]
+identifier = "deny-reopen-closed"
+description = "Denies the reopen_closed command without any pre-configured scope."
+commands.deny = ["reopen_closed"]

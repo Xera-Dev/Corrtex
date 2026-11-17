@@ -1,0 +1,79 @@
+/* Thèmes Corrtex — partagés par toutes les pages de l'interface.
+   Le thème est posé sur <html data-theme="..."> par common.js. */
+@font-face { font-family: 'Poppins'; src: url('fonts/Poppins-Bold.ttf'); font-weight: 700; }
+
+:root, [data-theme="graphite"] {
+  --strip: #2f2f32;          /* barre d'onglets */
+  --tool: #5e5e62;           /* barre d'outils + onglet actif */
+  --tab-hover: rgba(255,255,255,.08);
+  --omni: #48484c;
+  --omni-focus: #3d3d41;
+  --fg: #f4f4f6;
+  --fg-dim: rgba(255,255,255,.62);
+  --hover: rgba(255,255,255,.14);
+  --page-1: #2f2f32;         /* fond page d'accueil */
+  --page-2: #1e1e21;
+  --glass: rgba(255,255,255,.07);
+  --glass-border: rgba(255,255,255,.38);
+  --card: rgba(58,58,62,.62);
+  --card-solid: #3a3a3e;
+  --light-strength: .30;
+  color-scheme: dark;
+}
+
+[data-theme="minuit"] {
+  --strip: #0d0d0f;
+  --tool: #1f1f23;
+  --tab-hover: rgba(255,255,255,.06);
+  --omni: #121215;
+  --omni-focus: #0c0c0e;
+  --fg: #f2f2f4;
+  --fg-dim: rgba(255,255,255,.55);
+  --hover: rgba(255,255,255,.1);
+  --page-1: #111113;
+  --page-2: #060607;
+  --glass: rgba(255,255,255,.05);
+  --glass-border: rgba(255,255,255,.28);
+  --card: rgba(28,28,32,.66);
+  --card-solid: #1c1c20;
+  --light-strength: .34;
+  color-scheme: dark;
+}
+
+[data-theme="ocean"] {
+  --strip: #0d1726;
+  --tool: #1e2d46;
+  --tab-hover: rgba(255,255,255,.07);
+  --omni: #132239;
+  --omni-focus: #0f1c30;
+  --fg: #eef3fb;
+  --fg-dim: rgba(225,235,255,.6);
+  --hover: rgba(255,255,255,.12);
+  --page-1: #13213a;
+  --page-2: #070d18;
+  --glass: rgba(255,255,255,.06);
+  --glass-border: rgba(200,220,255,.34);
+  --card: rgba(26,40,64,.62);
+  --card-solid: #1b2a44;
+  --light-strength: .32;
+  color-scheme: dark;
+}
+
+[data-theme="clair"] {
+  --strip: #dfe1e5;
+  --tool: #f6f7f9;
+  --tab-hover: rgba(0,0,0,.06);
+  --omni: #e9ebef;
+  --omni-focus: #ffffff;
+  --fg: #1d1d20;
+  --fg-dim: rgba(0,0,0,.55);
+  --hover: rgba(0,0,0,.08);
+  --page-1: #f3f4f7;
+  --page-2: #dfe3ea;
+  --glass: rgba(255,255,255,.55);
+  --glass-border: rgba(0,0,0,.16);
+  --card: rgba(255,255,255,.6);
+  --card-solid: #ffffff;
+  --light-strength: .38;
+  color-scheme: light;
+}

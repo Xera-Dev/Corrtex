@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-shop-fetch"
+description = "Enables the shop_fetch command without any pre-configured scope."
+commands.allow = ["shop_fetch"]
+
+[[permission]]
+identifier = "deny-shop-fetch"
+description = "Denies the shop_fetch command without any pre-configured scope."
+commands.deny = ["shop_fetch"]

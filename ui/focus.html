@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Mode concentration</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="ambient.css">
+<script src="common.js"></script>
+<script src="ambient.js"></script>
+<style>
+  /* site bloqué pendant le mode concentration */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { font: 14px/1.4 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--fg); background: linear-gradient(180deg, var(--page-1), var(--page-2));
+         display: grid; place-items: center; overflow: hidden; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: default; }
+  .card { position: relative; z-index: 1; width: min(460px, 92vw); padding: 34px 32px 28px; border-radius: 28px; text-align: center; background: var(--card);
+          border: 1px solid var(--glass-border); backdrop-filter: blur(28px) saturate(1.4); -webkit-backdrop-filter: blur(28px) saturate(1.4); box-shadow: 0 24px 60px rgba(0,0,0,.3); animation: rise .4s cubic-bezier(.2,.8,.2,1); }
+  @keyframes rise { from { opacity: 0; transform: translateY(12px); } }
+  .ring { position: relative; width: 150px; height: 150px; margin: 0 auto 18px; }
+  .ring svg { width: 150px; height: 150px; transform: rotate(-90deg); overflow: visible; }
+  .ring circle { fill: none; stroke-width: 9; }
+  .ring .bg { stroke: var(--hover); }
+  .ring .fg { stroke: var(--l1, #ff4f7b); stroke-linecap: round; filter: drop-shadow(0 0 8px var(--l1, #ff4f7b)); transition: stroke-dashoffset 1s linear; }
+  .ring .t { position: absolute; inset: 0; display: grid; place-items: center; font: 600 26px/1 "Segoe UI Variable Display", "Segoe UI", system-ui; }
+  .ring .t small { display: block; font-size: 12px; font-weight: 500; color: var(--fg-dim); margin-top: 4px; }
+  h1 { font-size: 22px; font-weight: 600; margin-bottom: 8px; }
+  p { color: var(--fg-dim); }
+  p b { color: var(--fg); }
+  .acts { display: flex; gap: 10px; justify-content: center; margin-top: 24px; }
+  .btn { height: 40px; padding: 0 18px; border-radius: 20px; font-weight: 600; font-size: 13.5px; background: var(--glass); border: 1px solid var(--glass-border); }
+  .btn:hover { background: var(--hover); }
+  .btn.main { background: var(--fg); color: var(--page-2); border-color: transparent; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="ring">
+      <svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="42"/><circle class="fg" id="arc" cx="50" cy="50" r="42" stroke-dasharray="264" stroke-dashoffset="0"/></svg>
+      <div class="t"><div><span id="left">—</span><small>restantes</small></div></div>
+    </div>
+    <h1>Restez concentré</h1>
+    <p><b id="site">Ce site</b> est bloqué pendant le mode concentration.</p>
+    <div class="acts">
+      <button class="btn main" id="back">Retour</button>
+      <button class="btn" id="stop">Arrêter le mode concentration</button>
+    </div>
+  </div>
+  <script>
+  (function () {
+    const C = window.Corrtex;
+    const q = new URLSearchParams(location.hash.slice(1));
+    const site = q.get('s') || '';
+    if (site) document.getElementById('site').textContent = site;
+    document.title = 'Bloqué : ' + (site || 'site');
+    let total = 0;
+    async function tick() {
+      const f = await C.invoke('focus_info').catch(() => null);
+      if (!f || !f.left) {
+        // fin du mode : la page voulue s'ouvre
+        if (site) location.replace('https://' + site + '/');
+        return;
+      }
+      total = Math.max(total, f.left);
+      const m = Math.ceil(f.left / 60);
+      document.getElementById('left').textContent = m + ' min';
+      document.getElementById('arc').style.strokeDashoffset = String(264 * (1 - f.left / Math.max(total, 1)));
+      setTimeout(tick, 15000);
+    }
+    tick();
+    document.getElementById('back').onclick = () => { if (history.length > 1) history.back(); else location.href = 'newtab.html'; };
+    document.getElementById('stop').onclick = async () => { await C.invoke('focus_stop'); if (site) location.replace('https://' + site + '/'); };
+  })();
+  </script>
+</body>
+</html>

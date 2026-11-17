@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-toggle-ext-panel"
+description = "Enables the toggle_ext_panel command without any pre-configured scope."
+commands.allow = ["toggle_ext_panel"]
+
+[[permission]]
+identifier = "deny-toggle-ext-panel"
+description = "Denies the toggle_ext_panel command without any pre-configured scope."
+commands.deny = ["toggle_ext_panel"]

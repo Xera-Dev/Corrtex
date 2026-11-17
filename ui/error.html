@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Page inaccessible</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="ambient.css">
+<script src="common.js"></script>
+<script src="ambient.js"></script>
+<style>
+  /* Page d'erreur Corrtex : remplace celle du moteur quand un site ne s'ouvre pas */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font: 14px/1.4 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--fg);
+    background: linear-gradient(180deg, var(--page-1), var(--page-2)); overflow: hidden;
+    display: grid; place-items: center; padding: 24px;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: default; }
+  svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .card {
+    position: relative; width: min(520px, 100%); padding: 34px 32px 28px; border-radius: 26px; text-align: center;
+    background: var(--card); border: 1px solid var(--glass-border);
+    backdrop-filter: blur(28px) saturate(1.3); -webkit-backdrop-filter: blur(28px) saturate(1.3); box-shadow: 0 24px 60px rgba(0,0,0,.3);
+    animation: rise .45s cubic-bezier(.2,.8,.2,1) both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px) scale(.98); } }
+  .badge {
+    width: 72px; height: 72px; margin: 0 auto 18px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--glass); border: 1px solid var(--glass-border); box-shadow: inset 0 1px 0 rgba(255,255,255,.16);
+  }
+  .badge svg { width: 32px; height: 32px; }
+  h1 { font-size: 23px; font-weight: 600; margin-bottom: 8px; }
+  p.msg { color: var(--fg-dim); font-size: 14.5px; max-width: 400px; margin: 0 auto; }
+  .url {
+    display: inline-block; max-width: 100%; margin: 16px auto 0; padding: 7px 14px; border-radius: 16px;
+    background: var(--glass); border: 1px solid var(--glass-border); font-size: 13px; color: var(--fg-dim);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .tips { margin: 18px auto 0; text-align: left; max-width: 380px; color: var(--fg-dim); font-size: 13.5px; }
+  .tips li { margin: 5px 0 5px 18px; }
+  .actions { display: flex; gap: 10px; justify-content: center; margin-top: 24px; flex-wrap: wrap; }
+  .btn {
+    height: 40px; padding: 0 20px; border-radius: 20px; font-weight: 600; font-size: 13.5px;
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--glass); border: 1px solid var(--glass-border);
+  }
+  .btn:hover { background: var(--hover); }
+  .btn.main { background: var(--accent, #7aa2ff); color: #fff; border-color: transparent; }
+  .btn.main:hover { filter: brightness(1.1); }
+  .btn svg { width: 16px; height: 16px; }
+  .wait { margin-top: 16px; font-size: 12.5px; color: var(--fg-dim); display: none; align-items: center; justify-content: center; gap: 8px; }
+  .wait.on { display: flex; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent, #7aa2ff); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .3; transform: scale(.7); } }
+  .code { margin-top: 14px; font-size: 11.5px; color: var(--fg-dim); opacity: .7; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="badge" id="icon"></div>
+  <h1 id="title">Page inaccessible</h1>
+  <p class="msg" id="msg"></p>
+  <div class="url" id="url"></div>
+  <ul class="tips" id="tips"></ul>
+  <div class="actions">
+    <button class="btn main" id="retry">
+      <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>Réessayer
+    </button>
+    <button class="btn" id="search">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Rechercher sur Google
+    </button>
+  </div>
+  <div class="wait" id="wait"><span class="dot"></span>En attente de la connexion… la page se rechargera toute seule</div>
+  <div class="code" id="code"></div>
+</div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const q = new URLSearchParams(location.hash.slice(1));
+  const code = +q.get('c') || 0;
+  const url = q.get('u') || '';
+  let host = url;
+  try { host = new URL(url).hostname.replace(/^www\./, ''); } catch {}
+
+  const ICONS = {
+    offline: '<path d="M2 8.8a15 15 0 0 1 4.2-2.6M9.6 5.2A15 15 0 0 1 22 8.8"/><path d="M5 12.5a10 10 0 0 1 3.5-2M13 10.1a10 10 0 0 1 6 2.4"/><path d="M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r=".6" fill="currentColor"/><path d="m3 3 18 18"/>',
+    notfound: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/><path d="M9 9l4 4M13 9l-4 4"/>',
+    lock: '<rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/><path d="M12 15v2.5"/>',
+    server: '<rect x="4" y="4" width="16" height="7" rx="2"/><rect x="4" y="13" width="16" height="7" rx="2"/><path d="M8 7.5h.01M8 16.5h.01"/>',
+    time: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  };
+  // codes WebView2 (COREWEBVIEW2_WEB_ERROR_STATUS)
+  const KINDS = [
+    { codes: [11], icon: 'offline', title: 'Pas de connexion Internet', offline: true,
+      msg: 'Corrtex n’arrive pas à joindre Internet.',
+      tips: ['Vérifiez le câble réseau ou le Wi-Fi', 'Redémarrez votre box ou votre routeur', 'Désactivez un VPN ou un proxy s’il est en panne'] },
+    { codes: [13], icon: 'notfound', title: 'Site introuvable',
+      msg: `L’adresse de ${host || 'ce site'} est introuvable. Elle contient peut-être une faute de frappe.`,
+      tips: ['Vérifiez l’orthographe de l’adresse', 'Essayez de rechercher le site sur Google'] },
+    { codes: [1, 2, 3, 4, 5], icon: 'lock', title: 'Connexion non sécurisée',
+      msg: `Le certificat de sécurité de ${host || 'ce site'} n’est pas valide. Vos données pourraient être exposées : Corrtex a bloqué la page.`,
+      tips: ['Vérifiez la date et l’heure de votre ordinateur', 'Ne saisissez pas d’informations personnelles sur ce site'] },
+    { codes: [7], icon: 'time', title: 'Le site met trop de temps à répondre',
+      msg: `${host || 'Le site'} n’a pas répondu à temps.`,
+      tips: ['Réessayez dans quelques instants', 'Vérifiez votre connexion'] },
+    { codes: [6, 8, 10, 12, 15, 16, 17], icon: 'server', title: 'Page inaccessible',
+      msg: `${host || 'Le site'} refuse la connexion ou est momentanément indisponible.`,
+      tips: ['Réessayez dans quelques instants', 'Le site est peut-être en maintenance'] },
+  ];
+  let kind = KINDS.find(k => k.codes.includes(code)) || KINDS[KINDS.length - 1];
+  // hors ligne pour de vrai : on le dit, quel que soit le code
+  if (!navigator.onLine) kind = KINDS[0];
+
+  document.title = kind.title;
+  $('icon').innerHTML = `<svg viewBox="0 0 24 24">${ICONS[kind.icon]}</svg>`;
+  $('title').textContent = kind.title;
+  $('msg').textContent = kind.msg;
+  $('url').textContent = url;
+  $('url').style.display = url ? '' : 'none';
+  for (const t of kind.tips) { const li = document.createElement('li'); li.textContent = t; $('tips').appendChild(li); }
+  $('code').textContent = code ? `Code d’erreur : ${code}` : '';
+
+  const retry = () => { if (url) location.replace(url); else location.reload(); };
+  $('retry').onclick = retry;
+  $('search').onclick = () => {
+    const term = host || url;
+    location.href = 'https://www.google.com/search?q=' + encodeURIComponent(term);
+  };
+  if (kind.offline) $('wait').classList.add('on');
+  // la connexion revient : on recharge tout seul
+  addEventListener('online', () => setTimeout(retry, 600));
+  addEventListener('keydown', e => { if (e.key === 'F5' || (e.ctrlKey && e.key.toLowerCase() === 'r')) { e.preventDefault(); retry(); } });
+})();
+</script>
+</body>
+</html>

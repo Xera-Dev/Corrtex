@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ai-quick-result"
+description = "Enables the ai_quick_result command without any pre-configured scope."
+commands.allow = ["ai_quick_result"]
+
+[[permission]]
+identifier = "deny-ai-quick-result"
+description = "Denies the ai_quick_result command without any pre-configured scope."
+commands.deny = ["ai_quick_result"]

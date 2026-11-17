@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Capture d’écran</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="ambient.css">
+<script src="common.js"></script>
+<script src="ambient.js"></script>
+<style>
+  /* éditeur de capture : l'image au centre, une barre d'outils en verre au-dessus */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { font: 14px/1.3 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--fg); background: linear-gradient(180deg, var(--page-1), var(--page-2)); overflow: hidden; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: default; }
+  svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  #wrap { position: relative; z-index: 1; height: 100%; display: flex; flex-direction: column; align-items: center; padding: 18px 24px 24px; gap: 16px; }
+  .bar { display: flex; align-items: center; gap: 4px; padding: 6px; border-radius: 26px; background: var(--card); border: 1px solid var(--glass-border);
+         backdrop-filter: blur(28px) saturate(1.4); -webkit-backdrop-filter: blur(28px) saturate(1.4); box-shadow: 0 14px 40px rgba(0,0,0,.3); flex-wrap: wrap; justify-content: center; }
+  .tool { width: 40px; height: 40px; border-radius: 20px; display: grid; place-items: center; }
+  .tool:hover { background: var(--hover); }
+  .tool.on { background: var(--fg); color: var(--page-2); }
+  .sep { width: 1px; height: 26px; background: var(--glass-border); margin: 0 6px; }
+  .col { width: 26px; height: 26px; border-radius: 50%; margin: 0 3px; border: 2px solid transparent; outline: 2px solid transparent; outline-offset: 2px; }
+  .col.on { outline-color: var(--fg); }
+  .act { height: 40px; padding: 0 16px; border-radius: 20px; display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13.5px; background: var(--glass); border: 1px solid var(--glass-border); }
+  .act:hover { background: var(--hover); }
+  .act.main { background: var(--fg); color: var(--page-2); border-color: transparent; }
+  #stage { position: relative; flex: 1; min-height: 0; width: 100%; display: grid; place-items: center; }
+  #cv { max-width: 100%; max-height: 100%; border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.45); background: #fff; cursor: crosshair; touch-action: none; }
+  #txt { position: absolute; display: none; min-width: 120px; padding: 4px 8px; border-radius: 8px; font: 600 20px "Segoe UI", system-ui, sans-serif;
+         background: rgba(0,0,0,.25); border: 1.5px dashed rgba(255,255,255,.7); outline: none; color: #fff; }
+  #msg { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 3; padding: 10px 18px; border-radius: 20px; font-weight: 600; font-size: 13.5px;
+         background: var(--card); border: 1px solid var(--glass-border); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 10px 30px rgba(0,0,0,.3); display: none; }
+  .empty { margin: auto; color: var(--fg-dim); text-align: center; }
+</style>
+</head>
+<body>
+  <div id="wrap">
+    <div class="bar" id="bar">
+      <button class="tool on" data-t="pen" title="Stylo"><svg viewBox="0 0 24 24"><path d="M4.5 19.5l1-4L15 6l3 3-9.5 9.5zM13 8l3 3"/></svg></button>
+      <button class="tool" data-t="hl" title="Surligneur"><svg viewBox="0 0 24 24"><path d="M9 15l-3 3h5l1-1M9 15l6-9 3 3-6 9M9 15l3 3"/><path d="M4 21h16" opacity=".5"/></svg></button>
+      <button class="tool" data-t="arrow" title="Flèche"><svg viewBox="0 0 24 24"><path d="M5 19L19 5M10 5h9v9"/></svg></button>
+      <button class="tool" data-t="rect" title="Rectangle"><svg viewBox="0 0 24 24"><rect x="4.5" y="6" width="15" height="12" rx="2"/></svg></button>
+      <button class="tool" data-t="text" title="Texte"><svg viewBox="0 0 24 24"><path d="M5 6.5V5h14v1.5M12 5v14M9 19h6"/></svg></button>
+      <button class="tool" data-t="blur" title="Masquer (flouter une zone)"><svg viewBox="0 0 24 24"><rect x="4.5" y="5.5" width="15" height="13" rx="2"/><path d="M8 9h2M12 9h2M8 12h2M12 12h2M16 12h0M8 15h2M12 15h2"/></svg></button>
+      <div class="sep"></div>
+      <div id="cols"></div>
+      <div class="sep"></div>
+      <button class="tool" id="undo" title="Annuler (Ctrl+Z)"><svg viewBox="0 0 24 24"><path d="M9 14L4.5 9.5 9 5"/><path d="M4.5 9.5H14a5.5 5.5 0 0 1 0 11h-3"/></svg></button>
+      <button class="tool" id="redo" title="Rétablir (Ctrl+Y)"><svg viewBox="0 0 24 24"><path d="M15 14l4.5-4.5L15 5"/><path d="M19.5 9.5H10a5.5 5.5 0 0 0 0 11h3"/></svg></button>
+      <div class="sep"></div>
+      <button class="act" id="copy"><svg viewBox="0 0 24 24"><path d="M9 9.5h9.5v10H9zM15 9.5V5.5a1 1 0 0 0-1-1H5.5a1 1 0 0 0-1 1V14a1 1 0 0 0 1 1H9"/></svg>Copier</button>
+      <button class="act main" id="save"><svg viewBox="0 0 24 24"><path d="M12 4.5v10.5M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg>Enregistrer</button>
+    </div>
+    <div id="stage"><canvas id="cv"></canvas><input id="txt" spellcheck="false"></div>
+  </div>
+  <div id="msg"></div>
+  <script>
+  (function () {
+    const C = window.Corrtex;
+    const $ = (id) => document.getElementById(id);
+    const cv = $('cv'), ctx = cv.getContext('2d');
+    const COLORS = ['#ff4f7b', '#ffb020', '#4fcf8a', '#3ca0ff', '#ffffff', '#111111'];
+    let tool = 'pen', color = COLORS[0], base = null, shapes = [], redo = [], cur = null, title = 'capture';
+    // couleurs
+    COLORS.forEach((c, i) => {
+      const b = document.createElement('button');
+      b.className = 'col' + (i === 0 ? ' on' : '');
+      b.style.background = c;
+      b.style.boxShadow = '0 0 8px ' + c + '66';
+      b.title = 'Couleur';
+      b.onclick = () => { color = c; document.querySelectorAll('.col').forEach((x) => x.classList.toggle('on', x === b)); };
+      $('cols').append(b);
+    });
+    document.querySelectorAll('.tool[data-t]').forEach((b) => b.onclick = () => {
+      tool = b.dataset.t;
+      document.querySelectorAll('.tool[data-t]').forEach((x) => x.classList.toggle('on', x === b));
+    });
+    function msg(t) { const m = $('msg'); m.textContent = t; m.style.display = 'block'; clearTimeout(msg.t); msg.t = setTimeout(() => { m.style.display = 'none'; }, 2200); }
+
+    // ---------------------------------------------------------------- chargement
+    async function load() {
+      const id = +location.hash.slice(1);
+      const cap = await C.invoke('capture_get', { id }).catch(() => null);
+      if (!cap || !cap.data) { $('stage').innerHTML = '<div class="empty">Capture introuvable : refaites-la avec Ctrl+Maj+S.</div>'; return; }
+      title = (cap.title || 'capture').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 60) || 'capture';
+      const img = new Image();
+      img.onload = () => {
+        // zone choisie : recadrage (pixels CSS × densité de l'écran)
+        let sx = 0, sy = 0, sw = img.width, sh = img.height;
+        const c = cap.crop;
+        if (c && c.w && c.h) {
+          const k = img.width / Math.max(1, (c.vw || img.width / (c.dpr || 1)));
+          const d = c.dpr || k || 1;
+          sx = Math.round(c.x * d); sy = Math.round(c.y * d); sw = Math.round(c.w * d); sh = Math.round(c.h * d);
+          sw = Math.min(sw, img.width - sx); sh = Math.min(sh, img.height - sy);
+        }
+        base = document.createElement('canvas');
+        base.width = sw; base.height = sh;
+        base.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+        cv.width = sw; cv.height = sh;
+        draw();
+      };
+      img.src = 'data:image/png;base64,' + cap.data;
+    }
+
+    // ---------------------------------------------------------------- dessin
+    function pos(e) { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height }; }
+    function lw() { return Math.max(3, Math.round(cv.width / 400)); }
+    function drawShape(s, g) {
+      g.save();
+      g.strokeStyle = s.color; g.fillStyle = s.color; g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = s.w;
+      if (s.t === 'pen' || s.t === 'hl') {
+        if (s.t === 'hl') { g.globalAlpha = 0.35; g.lineWidth = s.w * 5; g.globalCompositeOperation = 'multiply'; }
+        g.beginPath();
+        s.pts.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
+        g.stroke();
+      } else if (s.t === 'rect') {
+        const r = norm(s); g.strokeRect(r.x, r.y, r.w, r.h);
+      } else if (s.t === 'arrow') {
+        const a = Math.atan2(s.y2 - s.y1, s.x2 - s.x1), h = s.w * 5;
+        g.beginPath(); g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); g.stroke();
+        g.beginPath(); g.moveTo(s.x2, s.y2);
+        g.lineTo(s.x2 - h * Math.cos(a - 0.45), s.y2 - h * Math.sin(a - 0.45));
+        g.lineTo(s.x2 - h * Math.cos(a + 0.45), s.y2 - h * Math.sin(a + 0.45));
+        g.closePath(); g.fill();
+      } else if (s.t === 'blur') {
+        // pixelisation de la zone (masque les informations)
+        const r = norm(s);
+        if (r.w > 2 && r.h > 2) {
+          const k = Math.max(6, Math.round(Math.min(r.w, r.h) / 10));
+          const tmp = document.createElement('canvas');
+          tmp.width = Math.max(1, Math.round(r.w / k)); tmp.height = Math.max(1, Math.round(r.h / k));
+          tmp.getContext('2d').drawImage(base, r.x, r.y, r.w, r.h, 0, 0, tmp.width, tmp.height);
+          g.imageSmoothingEnabled = false;
+          g.drawImage(tmp, 0, 0, tmp.width, tmp.height, r.x, r.y, r.w, r.h);
+        }
+      } else if (s.t === 'text') {
+        g.font = '600 ' + s.size + 'px "Segoe UI", system-ui, sans-serif';
+        g.textBaseline = 'top';
+        g.lineWidth = Math.max(2, s.size / 7); g.strokeStyle = s.color === '#111111' ? '#fff' : 'rgba(0,0,0,.55)';
+        g.strokeText(s.text, s.x, s.y);
+        g.fillText(s.text, s.x, s.y);
+      }
+      g.restore();
+    }
+    function norm(s) { return { x: Math.min(s.x1, s.x2), y: Math.min(s.y1, s.y2), w: Math.abs(s.x2 - s.x1), h: Math.abs(s.y2 - s.y1) }; }
+    function draw() {
+      if (!base) return;
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(base, 0, 0);
+      shapes.forEach((s) => drawShape(s, ctx));
+      if (cur) drawShape(cur, ctx);
+    }
+    cv.addEventListener('pointerdown', (e) => {
+      if (!base || e.button !== 0) return;
+      const p = pos(e);
+      if (tool === 'text') { startText(e, p); return; }
+      cv.setPointerCapture(e.pointerId);
+      cur = tool === 'pen' || tool === 'hl' ? { t: tool, color, w: lw(), pts: [p] } : { t: tool, color, w: lw(), x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+    });
+    cv.addEventListener('pointermove', (e) => {
+      if (!cur) return;
+      const p = pos(e);
+      if (cur.pts) cur.pts.push(p); else { cur.x2 = p.x; cur.y2 = p.y; }
+      draw();
+    });
+    cv.addEventListener('pointerup', () => {
+      if (!cur) return;
+      const ok = cur.pts ? cur.pts.length > 1 : (Math.abs(cur.x2 - cur.x1) > 3 || Math.abs(cur.y2 - cur.y1) > 3);
+      if (ok) { shapes.push(cur); redo = []; }
+      cur = null;
+      draw();
+    });
+    // texte : un champ apparaît à l'endroit du clic
+    function startText(e, p) {
+      const t = $('txt'), r = cv.getBoundingClientRect(), st = $('stage').getBoundingClientRect();
+      const size = Math.max(18, Math.round(cv.width / 45));
+      t.style.display = 'block';
+      t.style.left = (e.clientX - st.left) + 'px';
+      t.style.top = (e.clientY - st.top - 6) + 'px';
+      t.style.color = color;
+      t.style.fontSize = (size * r.width / cv.width) + 'px';
+      t.value = '';
+      t.focus();
+      const commit = () => {
+        t.removeEventListener('blur', commit);
+        if (t.value.trim()) { shapes.push({ t: 'text', color, text: t.value, x: p.x, y: p.y - size * 0.1, size }); redo = []; draw(); }
+        t.style.display = 'none';
+      };
+      t.addEventListener('blur', commit);
+      t.onkeydown = (ev) => { if (ev.key === 'Enter') t.blur(); if (ev.key === 'Escape') { t.value = ''; t.blur(); } ev.stopPropagation(); };
+    }
+    function undo() { if (shapes.length) { redo.push(shapes.pop()); draw(); } }
+    function again() { if (redo.length) { shapes.push(redo.pop()); draw(); } }
+    $('undo').onclick = undo;
+    $('redo').onclick = again;
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+      else if (e.ctrlKey && e.key.toLowerCase() === 'y') { e.preventDefault(); again(); }
+      else if (e.ctrlKey && e.key.toLowerCase() === 'c') { e.preventDefault(); copy(); }
+      else if (e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
+    });
+
+    // ---------------------------------------------------------------- copier / enregistrer
+    function blob() { return new Promise((res) => cv.toBlob(res, 'image/png')); }
+    async function copy() {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': await blob() })]);
+        msg('Image copiée dans le presse-papiers');
+      } catch (e) { msg('Copie impossible : utilisez « Enregistrer »'); }
+    }
+    async function save() {
+      const url = URL.createObjectURL(await blob());
+      const a = document.createElement('a');
+      const d = new Date();
+      a.href = url;
+      a.download = 'Capture ' + title + ' ' + d.toLocaleDateString('fr-FR').replace(/\//g, '-') + ' ' + d.toTimeString().slice(0, 8).replace(/:/g, 'h') + '.png';
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      msg('Enregistrée dans le dossier Téléchargements');
+    }
+    $('copy').onclick = copy;
+    $('save').onclick = save;
+    load();
+  })();
+  </script>
+</body>
+</html>

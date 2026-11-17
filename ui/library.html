@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Historique</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="ambient.css">
+<script src="common.js"></script>
+<script src="ambient.js"></script>
+<style>
+  /* Bibliothèque : historique et téléchargements, dans le style des réglages Corrtex */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font: 14px/1.35 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--fg);
+    background: linear-gradient(180deg, var(--page-1), var(--page-2)); overflow: hidden;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { background: none; border: 0; cursor: default; }
+  svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  #scroll { position: relative; height: 100%; overflow-y: auto; padding: 36px 24px 60px; }
+  #scroll::-webkit-scrollbar { width: 8px; } #scroll::-webkit-scrollbar-thumb { background: var(--hover); border-radius: 4px; }
+  .wrap { max-width: 820px; margin: 0 auto; }
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+  header h1 { font-size: 26px; font-weight: 600; flex: 1; }
+  .seg { display: flex; gap: 2px; padding: 4px; border-radius: 22px; background: var(--glass); border: 1px solid var(--glass-border); }
+  .seg button { height: 34px; padding: 0 16px; border-radius: 17px; font-weight: 600; font-size: 13.5px; color: var(--fg-dim); }
+  .seg button:hover { color: var(--fg); background: var(--hover); }
+  .seg button.on { color: var(--fg); background: var(--hover); box-shadow: inset 0 1px 0 rgba(255,255,255,.18); }
+  .card { padding: 20px 22px 24px; border-radius: 22px; background: var(--card); border: 1px solid var(--glass-border);
+          backdrop-filter: blur(28px) saturate(1.3); -webkit-backdrop-filter: blur(28px) saturate(1.3); box-shadow: 0 24px 60px rgba(0,0,0,.3); }
+  .tools { display: flex; gap: 10px; align-items: center; }
+  .search { flex: 1; display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 16px; border-radius: 22px; background: var(--glass); border: 2px solid var(--glass-border); }
+  .search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font-size: 15px; }
+  .search input::placeholder { color: var(--fg-dim); }
+  .chip { height: 36px; padding: 0 16px; border-radius: 18px; border: 1px solid var(--glass-border); background: var(--glass); font-weight: 600; font-size: 13px; white-space: nowrap; }
+  .chip:hover { background: var(--hover); }
+  .chip.danger { color: #ff8a9c; }
+  .group { padding: 18px 0 4px; }
+  .group + .group { border-top: 1px solid var(--hover); margin-top: 14px; }
+  .group h3 { font-size: 14px; font-weight: 600; margin: 0 2px 10px; }
+  .list { display: flex; flex-direction: column; gap: 2px; border-radius: 16px; overflow: hidden; }
+  .row { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 6px 10px 6px 14px; background: var(--glass); }
+  .row:hover { background: var(--hover); }
+  .row .time { min-width: 44px; white-space: nowrap; flex: none; font-size: 12.5px; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+  .row img { width: 18px; height: 18px; border-radius: 4px; flex: none; }
+  .row .main { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; cursor: default; }
+  .row .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .h { color: var(--fg-dim); font-size: 12.5px; white-space: nowrap; flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
+  .row .x { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; opacity: 0; }
+  .row:hover .x { opacity: 1; }
+  .row .x:hover { background: var(--hover); }
+  .row .x svg { width: 15px; height: 15px; }
+  .dl .main { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .dl .state { font-size: 12.5px; color: var(--fg-dim); }
+  .dl .state.ok { color: #6fd39a; } .dl .state.ko { color: #ff8a9c; }
+  .dl .btns { display: flex; gap: 6px; }
+  .dl .btns .chip { height: 32px; padding: 0 12px; font-size: 12.5px; }
+  .fileic { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--hover); flex: none; }
+  .ring { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--hover); border-top-color: var(--l1, #ff4f7b); animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty { padding: 50px 10px 30px; text-align: center; color: var(--fg-dim); }
+  .empty svg { width: 38px; height: 38px; opacity: .5; margin-bottom: 10px; }
+  [hidden] { display: none !important; }
+  .aib { height: 30px; padding: 0 12px 0 9px; margin-right: -8px; border-radius: 15px; display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12.5px;
+         background: color-mix(in srgb, var(--l1, #ff4f7b) 18%, var(--glass)); border: 1px solid color-mix(in srgb, var(--l1, #ff4f7b) 50%, var(--glass-border)); }
+  .aib:hover { background: color-mix(in srgb, var(--l1, #ff4f7b) 30%, var(--glass)); }
+  .aib svg { width: 14px; height: 14px; fill: var(--l1, #ff4f7b); stroke: none; }
+  .aiwait { display: flex; align-items: center; gap: 12px; padding: 26px 6px; color: var(--fg-dim); }
+  .group h3 .spark { color: var(--l1, #ff4f7b); }
+</style>
+</head>
+<body>
+  <div id="scroll">
+    <div class="wrap">
+      <header>
+        <h1 id="title">Historique</h1>
+        <div class="seg">
+          <button id="tab-history" class="on">Historique</button>
+          <button id="tab-downloads">Téléchargements</button>
+          <button id="tab-readlater">À lire</button>
+        </div>
+      </header>
+
+      <section id="history" class="card">
+        <div class="tools">
+          <label class="search">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+            <input id="q" placeholder="Rechercher, ou décrire une page à l’IA (« le site de chaussures vu mardi »)" autocomplete="off" spellcheck="false">
+            <button id="ai-search" class="aib" type="button" title="Demander à l’IA de retrouver la page (Entrée)">
+              <svg viewBox="0 0 24 24"><path d="M12 3.5c.5 4.3 2.7 6.5 7 7-4.3.5-6.5 2.7-7 7-.5-4.3-2.7-6.5-7-7 4.3-.5 6.5-2.7 7-7z"/></svg>IA
+            </button>
+          </label>
+          <button id="clear-history" class="chip danger">Effacer l’historique</button>
+        </div>
+        <div id="hist"></div>
+      </section>
+
+      <section id="readlater" class="card" hidden>
+        <div class="tools" style="justify-content: space-between">
+          <h3 style="font-size: 14px; font-weight: 600">Liste de lecture</h3>
+          <span style="font-size: 12.5px; color: var(--fg-dim)">Clic droit sur un onglet › « Lire plus tard »</span>
+        </div>
+        <div id="rl"></div>
+      </section>
+
+      <section id="downloads" class="card" hidden>
+        <div class="tools" style="justify-content: space-between">
+          <h3 style="font-size: 14px; font-weight: 600">Téléchargements de cette session</h3>
+          <button id="clear-dl" class="chip">Effacer la liste</button>
+        </div>
+        <div id="dls"></div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const C = window.Corrtex;
+      const $ = (id) => document.getElementById(id);
+      const ICON = {
+        x: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+        clock: '<svg viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3.5 4v4.5H8"/><path d="M12 7.5V12l3 2"/></svg>',
+        file: '<svg viewBox="0 0 24 24"><path d="M6.5 3.5h7l4 4v13h-11z"/><path d="M13.5 3.5v4h4"/></svg>',
+        dl: '<svg viewBox="0 0 24 24"><path d="M12 4.5v10.5M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg>'
+      };
+      let section = 'history';
+
+      // ---------------------------------------------------------------- onglets de la page
+      function show(s) {
+        section = ['downloads', 'readlater'].includes(s) ? s : 'history';
+        for (const k of ['history', 'downloads', 'readlater']) { $(k).hidden = section !== k; $('tab-' + k).classList.toggle('on', section === k); }
+        const t = { history: 'Historique', downloads: 'Téléchargements', readlater: 'À lire' }[section];
+        $('title').textContent = t;
+        document.title = t;
+        if (location.hash !== '#' + section) history.replaceState(null, '', '#' + section);
+        if (section === 'history') loadHistory(); else if (section === 'readlater') loadReadLater(); else loadDownloads();
+      }
+      $('tab-history').onclick = () => show('history');
+      $('tab-downloads').onclick = () => show('downloads');
+      $('tab-readlater').onclick = () => show('readlater');
+
+      // ---------------------------------------------------------------- liste de lecture
+      async function loadReadLater() {
+        const list = await C.invoke('read_later_list').catch(() => []);
+        const box = $('rl');
+        box.replaceChildren();
+        if (!list || !list.length) {
+          box.innerHTML = '<div class="empty">' + ICON.clock + '<div>Rien à lire pour le moment.<br>Ajoutez une page avec le clic droit sur son onglet › « Lire plus tard », ou Ctrl+K.</div></div>';
+          return;
+        }
+        const l = document.createElement('div');
+        l.className = 'list';
+        for (const r of list) {
+          const row = document.createElement('div');
+          row.className = 'row';
+          const time = document.createElement('span');
+          time.className = 'time';
+          time.textContent = new Date(r.added * 1000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+          const main = document.createElement('div');
+          main.className = 'main';
+          main.title = r.url;
+          const t = document.createElement('span'); t.className = 't'; t.textContent = r.title || r.url;
+          const h = document.createElement('span'); h.className = 'h'; h.textContent = C.hostOf(r.url);
+          main.append(t, h);
+          // ouvrir la page la retire de la liste (lue)
+          main.onclick = async () => { await C.invoke('new_tab', { url: r.url }); C.invoke('read_later_remove', { url: r.url }); };
+          const x = document.createElement('button');
+          x.className = 'x'; x.title = 'Retirer de la liste'; x.innerHTML = ICON.x;
+          x.onclick = () => C.invoke('read_later_remove', { url: r.url });
+          row.append(time, favImg(r.url), main, x);
+          l.append(row);
+        }
+        box.append(l);
+      }
+      C.listen('read-later', () => { if (section === 'readlater') loadReadLater(); });
+      C.listen('library-section', (s) => show(s));
+
+      // ---------------------------------------------------------------- historique
+      function dayLabel(d) {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const day = new Date(d); day.setHours(0, 0, 0, 0);
+        const diff = Math.round((today - day) / 86400000);
+        if (diff === 0) return 'Aujourd’hui';
+        if (diff === 1) return 'Hier';
+        const s = day.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: day.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
+        return s.charAt(0).toUpperCase() + s.slice(1);
+      }
+      function favImg(url) {
+        const img = document.createElement('img');
+        img.src = C.favicon(url);
+        img.alt = '';
+        img.onerror = function () { this.style.visibility = 'hidden'; };
+        return img;
+      }
+      let seq = 0;
+      async function loadHistory() {
+        const my = ++seq;
+        const list = await C.invoke('history_list', { query: $('q').value.trim(), limit: 800 }).catch(() => []);
+        if (my !== seq) return;
+        const box = $('hist');
+        box.replaceChildren();
+        if (!list.length) {
+          box.innerHTML = '<div class="empty">' + ICON.clock + '<div>' + ($('q').value.trim() ? 'Aucune page ne correspond.' : 'Aucune page visitée pour le moment.') + '</div></div>';
+          return;
+        }
+        renderRows(box, list, true);
+      }
+      function renderRows(box, list, byDay, title) {
+        let cur = '', listEl = null;
+        if (!byDay) {
+          const g = document.createElement('div');
+          g.className = 'group';
+          const t = document.createElement('h3');
+          const sp = document.createElement('span'); sp.className = 'spark'; sp.textContent = '✦ ';
+          t.append(sp, document.createTextNode(title || ''));
+          listEl = document.createElement('div');
+          listEl.className = 'list';
+          g.append(t, listEl);
+          box.append(g);
+        }
+        for (const h of list) {
+          const d = new Date(h.time * 1000);
+          const label = dayLabel(d);
+          if (byDay && label !== cur) {
+            cur = label;
+            const g = document.createElement('div');
+            g.className = 'group';
+            const t = document.createElement('h3');
+            t.textContent = label;
+            listEl = document.createElement('div');
+            listEl.className = 'list';
+            g.append(t, listEl);
+            box.append(g);
+          }
+          const row = document.createElement('div');
+          row.className = 'row';
+          const time = document.createElement('span');
+          time.className = 'time';
+          time.textContent = byDay ? d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+          const main = document.createElement('div');
+          main.className = 'main';
+          main.title = h.url;
+          const t = document.createElement('span');
+          t.className = 't';
+          t.textContent = h.title || h.url;
+          const host = document.createElement('span');
+          host.className = 'h';
+          host.textContent = C.hostOf(h.url);
+          main.append(t, host);
+          main.onclick = (e) => C.invoke('new_tab', { url: h.url });
+          const x = document.createElement('button');
+          x.className = 'x';
+          x.title = 'Retirer de l’historique';
+          x.innerHTML = ICON.x;
+          x.onclick = async () => { await C.invoke('history_delete', { url: h.url, time: h.time }); row.remove(); };
+          row.append(time, favImg(h.url), main, x);
+          listEl.append(row);
+        }
+      }
+      let qTimer = null;
+      $('q').addEventListener('input', () => { clearTimeout(qTimer); aiReq = ''; qTimer = setTimeout(loadHistory, 150); });
+
+      // ---------------------------------------------------------------- recherche avec l'IA
+      let aiReq = '', aiList = [];
+      async function askAI() {
+        const q = $('q').value.trim();
+        if (!q) { $('q').focus(); return; }
+        clearTimeout(qTimer);
+        ++seq;
+        aiReq = 'h' + Date.now().toString(36);
+        const box = $('hist');
+        box.replaceChildren();
+        const w = document.createElement('div');
+        w.className = 'aiwait';
+        w.innerHTML = '<div class="ring"></div>';
+        w.append(document.createTextNode('L’IA cherche « ' + q + ' » dans votre historique…'));
+        box.append(w);
+        try { aiList = await window.__TAURI__.core.invoke('history_ai', { query: q, req: aiReq }); }
+        catch (e) { aiReq = ''; w.replaceChildren(document.createTextNode(String(e) === 'historique vide' ? 'Votre historique est vide.' : 'L’IA n’est pas disponible pour le moment.')); }
+      }
+      window.__corrtexHistAI = function (id, text, done, error) {
+        if (id !== aiReq || !done) return;
+        aiReq = '';
+        const box = $('hist');
+        box.replaceChildren();
+        let ids = [];
+        const m = String(text || '').match(/\[[\d\s,]*\]/);
+        if (m) { try { ids = JSON.parse(m[0]); } catch (e) {} }
+        const found = ids.map((i) => aiList[i]).filter(Boolean);
+        if (!found.length) {
+          box.innerHTML = '<div class="empty">' + ICON.clock + '<div>' + (error ? 'L’IA n’a pas répondu à temps.' : 'L’IA n’a trouvé aucune page correspondante.') + '</div></div>';
+          return;
+        }
+        renderRows(box, found, false, 'Trouvé par l’IA pour « ' + $('q').value.trim() + ' »');
+      };
+      $('ai-search').addEventListener('click', (e) => { e.preventDefault(); askAI(); });
+      $('q').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); askAI(); } });
+      // effacement en deux temps (pas de boîte de dialogue)
+      let armed = null;
+      $('clear-history').onclick = async () => {
+        const b = $('clear-history');
+        if (!armed) {
+          b.textContent = 'Confirmer l’effacement ?';
+          armed = setTimeout(() => { armed = null; b.textContent = 'Effacer l’historique'; }, 3000);
+          return;
+        }
+        clearTimeout(armed); armed = null;
+        b.textContent = 'Effacer l’historique';
+        await C.invoke('history_clear');
+        loadHistory();
+      };
+
+      // ---------------------------------------------------------------- téléchargements
+      async function loadDownloads() {
+        const list = await C.invoke('downloads_list').catch(() => []);
+        const box = $('dls');
+        box.replaceChildren();
+        if (!list.length) {
+          box.innerHTML = '<div class="empty">' + ICON.dl + '<div>Aucun téléchargement pendant cette session.</div></div>';
+          return;
+        }
+        const g = document.createElement('div');
+        g.className = 'group';
+        const l = document.createElement('div');
+        l.className = 'list';
+        g.append(l);
+        box.append(g);
+        for (const d of list) {
+          const row = document.createElement('div');
+          row.className = 'row dl';
+          const ic = document.createElement('div');
+          ic.className = 'fileic';
+          ic.innerHTML = d.state === 'progress' ? '<div class="ring"></div>' : ICON.file;
+          const main = document.createElement('div');
+          main.className = 'main';
+          const t = document.createElement('span');
+          t.className = 't';
+          t.textContent = d.name;
+          const st = document.createElement('span');
+          st.className = 'state' + (d.state === 'done' ? ' ok' : d.state === 'failed' ? ' ko' : '');
+          st.textContent = (d.state === 'progress' ? 'Téléchargement en cours…' : d.state === 'done' ? 'Terminé' : 'Échec') + ' · ' + C.hostOf(d.url);
+          main.append(t, st);
+          const btns = document.createElement('div');
+          btns.className = 'btns';
+          if (d.state === 'done') {
+            const o = document.createElement('button');
+            o.className = 'chip';
+            o.textContent = 'Ouvrir';
+            o.onclick = () => C.invoke('download_open', { id: d.id, folder: false }).catch(() => { st.textContent = 'Fichier introuvable'; st.className = 'state ko'; });
+            const f = document.createElement('button');
+            f.className = 'chip';
+            f.textContent = 'Afficher dans le dossier';
+            f.onclick = () => C.invoke('download_open', { id: d.id, folder: true }).catch(() => { st.textContent = 'Fichier introuvable'; st.className = 'state ko'; });
+            btns.append(o, f);
+          }
+          row.append(ic, main, btns);
+          l.append(row);
+        }
+      }
+      $('clear-dl').onclick = async () => { await C.invoke('downloads_clear'); loadDownloads(); };
+      C.listen('downloads-changed', () => { if (section === 'downloads') loadDownloads(); });
+
+      show((location.hash || '#history').slice(1));
+    })();
+  </script>
+</body>
+</html>

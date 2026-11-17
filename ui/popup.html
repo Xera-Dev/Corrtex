@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Corrtex</title>
+<link rel="stylesheet" href="theme.css">
+<script src="common.js"></script>
+<style>
+  /* petite fenêtre flottante transparente : une carte de verre avec une vraie ombre */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: transparent; overflow: hidden; user-select: none; -webkit-user-select: none; }
+  body { padding: 4px 14px 14px; font: 13.5px/1.25 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--fg); }
+  svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  /* même présentation que le panneau Réglages : carte, rubriques, lignes de verre en liste */
+  #card {
+    padding: 14px 14px 12px; border-radius: 22px;
+    background: color-mix(in srgb, var(--card-solid) 97%, transparent);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 12px 30px rgba(0,0,0,.42);
+    animation: pop .16s cubic-bezier(.2,.9,.3,1.2); transform-origin: top left;
+  }
+  @keyframes pop { from { opacity: 0; transform: translateY(-4px) scale(.97); } }
+  .title { display: flex; align-items: center; gap: 10px; margin: 2px 2px 12px; font-size: 15px; font-weight: 600; min-width: 0; }
+  .title img { width: 18px; height: 18px; border-radius: 4px; flex: none; }
+  .title span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sec + .sec { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hover); }
+  h3 { margin: 0 2px 8px; font-size: 13px; font-weight: 600; letter-spacing: .2px; }
+  .list { display: flex; flex-direction: column; gap: 2px; border-radius: 14px; overflow: hidden; }
+  .it { width: 100%; min-height: 40px; display: flex; align-items: center; gap: 12px; padding: 6px 14px; border: 0; background: var(--glass);
+        font: inherit; font-size: 13.5px; color: var(--fg); text-align: left; cursor: default; }
+  .it:hover { background: var(--hover); }
+  .it:disabled { opacity: .38; pointer-events: none; }
+  .it span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .it kbd { font-family: inherit; font-size: 12px; color: var(--fg-dim); }
+  .it .dot { width: 10px; height: 10px; border-radius: 50%; margin: 0 4px; box-shadow: 0 0 8px currentColor; flex: none; }
+  .it.danger { color: #ff8a9c; }
+  /* groupe : nom et couleurs */
+  .name { width: 100%; margin: 0 0 10px; height: 36px; padding: 0 14px; border-radius: 18px; font: inherit; font-size: 13.5px; color: var(--fg);
+          background: var(--glass); border: 1px solid var(--glass-border); outline: none; }
+  .name:focus { border-color: color-mix(in srgb, var(--fg) 60%, transparent); }
+  .colors { display: flex; gap: 8px; padding: 2px 2px 4px; }
+  .sw { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; outline: 2px solid transparent; outline-offset: 2px; cursor: default; }
+  .sw.sel { outline-color: var(--fg); }
+
+  /* notes du site */
+  .note-area { width: 100%; min-height: 160px; max-height: 320px; resize: vertical; padding: 12px 14px; border-radius: 16px; font: inherit; font-size: 13.5px; line-height: 1.45;
+               color: var(--fg); background: var(--glass); border: 1px solid var(--glass-border); outline: none; user-select: text; -webkit-user-select: text; }
+  .note-area:focus { border-color: color-mix(in srgb, var(--fg) 50%, transparent); }
+  .note-foot { display: flex; justify-content: space-between; margin: 8px 4px 0; font-size: 11.5px; color: var(--fg-dim); }
+  .it .cnt { flex: none; font-size: 12px; color: var(--fg-dim); }
+  .it img.fv { width: 16px; height: 16px; border-radius: 4px; flex: none; }
+  /* palette de commandes (Ctrl+K) */
+  #card.pal { padding: 12px; }
+  .pal .q { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 16px; margin-bottom: 10px; border-radius: 24px;
+            background: var(--glass); border: 2px solid var(--glass-border); }
+  .pal .q svg { width: 19px; height: 19px; opacity: .75; }
+  .pal .q input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: inherit; font-size: 15.5px; color: var(--fg); }
+  .pal .q input::placeholder { color: var(--fg-dim); }
+  .pal .res { max-height: 360px; overflow-y: auto; margin: 0 -2px; padding: 0 2px; }
+  .pal .res::-webkit-scrollbar { width: 0; }
+  .pal .sec + .sec { margin-top: 10px; padding-top: 10px; }
+  .pal .it img { width: 18px; height: 18px; border-radius: 4px; flex: none; }
+  .pal .it small { color: var(--fg-dim); font-size: 12px; flex: none; max-width: 40%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pal .it.sel { background: var(--hover); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 30%, transparent); }
+  .pal .empty { padding: 18px 6px; text-align: center; color: var(--fg-dim); font-size: 13px; }
+  .pal .foot { display: flex; gap: 14px; justify-content: flex-end; padding: 10px 4px 0; font-size: 11.5px; color: var(--fg-dim); }
+  .pal .foot b { font-weight: 600; color: var(--fg); }
+  /* aperçu au survol */
+  #card.pv { padding: 14px 16px 14px; }
+  .pv .top { display: flex; gap: 10px; align-items: flex-start; }
+  .pv img { width: 20px; height: 20px; border-radius: 5px; flex: none; margin-top: 1px; }
+  .pv .t { font-weight: 600; font-size: 13.5px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .pv .u { color: var(--fg-dim); font-size: 12px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .badge { height: 22px; padding: 0 9px; border-radius: 11px; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600;
+           background: var(--glass); border: 1px solid var(--glass-border); color: var(--fg); }
+  .badge svg { width: 12px; height: 12px; }
+  .badge.g { border-color: color-mix(in srgb, var(--gc) 60%, transparent); background: color-mix(in srgb, var(--gc) 20%, transparent); }
+  .badge.g i { width: 7px; height: 7px; border-radius: 50%; background: var(--gc); }
+</style>
+</head>
+<body>
+  <div id="card"></div>
+  <script>
+    (function () {
+      const C = window.Corrtex;
+      const card = document.getElementById('card');
+      const I = {
+        pin: '<svg viewBox="0 0 24 24"><path d="M9 4.5h6l-1 5 3 3v1.5H7V12.5l3-3z"/><path d="M12 14v6"/></svg>',
+        unpin: '<svg viewBox="0 0 24 24"><path d="M9 4.5h6l-1 5 3 3v1.5H7V12.5l3-3z"/><path d="M12 14v6M4 4l16 16"/></svg>',
+        dup: '<svg viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/></svg>',
+        group: '<svg viewBox="0 0 24 24"><rect x="3.5" y="6" width="17" height="12" rx="3"/><path d="M12 9.5v5M9.5 12h5"/></svg>',
+        ungroup: '<svg viewBox="0 0 24 24"><rect x="3.5" y="6" width="17" height="12" rx="3"/><path d="M9.5 12h5"/></svg>',
+        sleep: '<svg viewBox="0 0 24 24"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"/></svg>',
+        reopen: '<svg viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4v4.5H9"/></svg>',
+        reload: '<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
+        closeO: '<svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3"/><path d="M10 10l4 4M14 10l-4 4"/></svg>',
+        close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+        fold: '<svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>',
+        unfold: '<svg viewBox="0 0 24 24"><path d="M7 14l5-5 5 5"/></svg>',
+        note: '<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>',
+        plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+        history: '<svg viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3.5 4v4.5H8"/><path d="M12 7.5V12l3 2"/></svg>',
+        download: '<svg viewBox="0 0 24 24"><path d="M12 4.5v10.5M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg>',
+        find: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>',
+        book: '<svg viewBox="0 0 24 24"><path d="M12 6.5c-1.8-1.3-4.3-2-7.5-2v13c3.2 0 5.7.7 7.5 2 1.8-1.3 4.3-2 7.5-2v-13c-3.2 0-5.7.7-7.5 2z"/><path d="M12 6.5v13"/></svg>',
+        spark: '<svg viewBox="0 0 24 24"><path d="M12 3.5c.5 4.3 2.7 6.5 7 7-4.3.5-6.5 2.7-7 7-.5-4.3-2.7-6.5-7-7 4.3-.5 6.5-2.7 7-7z"/></svg>',
+        panel: '<svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M14.5 4.5v15"/></svg>',
+        zoom: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5M8.5 11h5"/></svg>',
+        full: '<svg viewBox="0 0 24 24"><path d="M4.5 9V4.5H9M15 4.5h4.5V9M19.5 15v4.5H15M9 19.5H4.5V15"/></svg>',
+        split: '<svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M12 4.5v15"/></svg>',
+        folder: '<svg viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>',
+        check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+        edit: '<svg viewBox="0 0 24 24"><path d="M4.5 19.5l1-4L15 6l3 3-9.5 9.5zM13 8l3 3"/></svg>',
+        open: '<svg viewBox="0 0 24 24"><path d="M14 4.5h5.5V10M19.5 4.5L11 13M17 14v5.5H4.5V7H10"/></svg>'
+      };
+      const mine = (d) => d && (!d.win || d.win === C.win().replace(/^(popw|prvw)-/, ''));
+      const done = () => C.invoke('popup_close');
+
+      function item(icon, label, fn, opts) {
+        const b = document.createElement('button');
+        b.className = 'it' + (opts && opts.danger ? ' danger' : '');
+        b.innerHTML = icon + '<span></span>' + (opts && opts.kbd ? '<kbd></kbd>' : '');
+        b.querySelector('span').textContent = label;
+        if (opts && opts.kbd) b.querySelector('kbd').textContent = opts.kbd;
+        if (opts && opts.disabled) b.disabled = true;
+        b.addEventListener('click', fn);
+        return b;
+      }
+      // rubrique façon réglages : titre + liste de lignes
+      function section(title) {
+        const sec = document.createElement('div');
+        sec.className = 'sec';
+        if (title) { const h = document.createElement('h3'); h.textContent = title; sec.append(h); }
+        const list = document.createElement('div');
+        list.className = 'list';
+        sec.append(list);
+        card.append(sec);
+        return list;
+      }
+      function titleRow(text, icon) {
+        const d = document.createElement('div');
+        d.className = 'title';
+        if (icon) { const img = document.createElement('img'); img.src = icon; img.onerror = function () { this.remove(); }; d.append(img); }
+        const sp = document.createElement('span');
+        sp.textContent = text;
+        d.append(sp);
+        card.append(d);
+      }
+
+      function tabMenu(d) {
+        const t = d.tab, act = (action, arg) => C.invoke('tab_action', { id: t.id, action, arg: arg === undefined ? null : arg });
+        titleRow(t.title || 'Onglet', t.url ? C.favicon(t.url) : 'icon.png');
+        const a = section('Onglet');
+        a.append(item(t.pinned ? I.unpin : I.pin, t.pinned ? 'Détacher l’onglet' : 'Épingler l’onglet', () => act(t.pinned ? 'unpin' : 'pin')));
+        a.append(item(I.dup, 'Dupliquer', () => act('duplicate'), { disabled: !t.url }));
+        a.append(item(I.reload, 'Actualiser', () => act('reload'), { disabled: t.asleep }));
+        a.append(item(I.sleep, t.asleep ? 'Déjà en veille' : 'Mettre en veille', () => act('sleep'), { disabled: t.active || t.asleep || !t.url }));
+        const o = section('Organisation');
+        if (d.split === t.id) o.append(item(I.split, 'Quitter la vue côte à côte', () => { C.invoke('split_close'); done(); }));
+        else o.append(item(I.split, 'Ouvrir côte à côte', () => C.invoke('split_open', { id: t.id }), { disabled: t.active }));
+        o.append(item(I.book, 'Lire plus tard', () => C.invoke('read_later_add', { id: t.id }), { disabled: !t.url }));
+        for (const sp of d.spaces || []) {
+          if (sp.id === (d.space || 0)) continue;
+          const b = item('<i class="dot"></i>', 'Déplacer vers « ' + sp.name + ' »', () => act('space', sp.id));
+          b.querySelector('.dot').style.cssText = 'background:' + sp.color + ';color:' + sp.color;
+          o.append(b);
+        }
+        const g = section('Groupe');
+        g.append(item(I.group, 'Ajouter à un nouveau groupe', () => act('group_new')));
+        for (const gr of d.groups || []) {
+          if (gr.id === t.group) continue;
+          const b = item('<i class="dot"></i>', 'Ajouter à « ' + (gr.name || 'Groupe') + ' »', () => act('group_add', gr.id));
+          b.querySelector('.dot').style.cssText = 'background:' + gr.color + ';color:' + gr.color;
+          g.append(b);
+        }
+        if (t.group) g.append(item(I.ungroup, 'Retirer du groupe', () => act('group_remove')));
+        const c = section('Fermer');
+        c.append(item(I.reopen, 'Rouvrir l’onglet fermé', () => { C.invoke('reopen_closed'); done(); }, { kbd: 'Ctrl+Maj+T', disabled: !d.closed }));
+        c.append(item(I.closeO, 'Fermer les autres onglets', () => act('close_others'), { disabled: d.count < 2 }));
+        c.append(item(I.close, 'Fermer l’onglet', () => act('close'), { kbd: 'Ctrl+W', danger: true }));
+      }
+
+      function groupMenu(d) {
+        const g = d.group, act = (action, arg) => C.invoke('group_action', { gid: g.id, action, arg: arg === undefined ? null : arg });
+        titleRow('Groupe');
+        const sec = document.createElement('div');
+        sec.className = 'sec';
+        const h = document.createElement('h3');
+        h.textContent = 'Nom et couleur';
+        const input = document.createElement('input');
+        input.className = 'name';
+        input.placeholder = 'Nom du groupe';
+        input.value = g.name || '';
+        input.maxLength = 40;
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { act('rename', input.value); done(); } if (e.key === 'Escape') done(); });
+        input.addEventListener('change', () => act('rename', input.value));
+        const colors = document.createElement('div');
+        colors.className = 'colors';
+        for (const c of d.colors || []) {
+          const s = document.createElement('button');
+          s.className = 'sw' + (c === g.color ? ' sel' : '');
+          s.style.background = c;
+          s.style.boxShadow = '0 0 10px ' + c + '66';
+          s.addEventListener('click', () => { act('color', c); colors.querySelectorAll('.sw').forEach((x) => x.classList.toggle('sel', x === s)); });
+          colors.append(s);
+        }
+        sec.append(h, input, colors);
+        card.append(sec);
+        const l = section('Actions');
+        l.append(item(g.collapsed ? I.unfold : I.fold, g.collapsed ? 'Déplier le groupe' : 'Replier le groupe', () => act('toggle')));
+        l.append(item(I.ungroup, 'Dissocier le groupe', () => act('ungroup')));
+        l.append(item(I.close, 'Fermer le groupe', () => act('close'), { danger: true }));
+        setTimeout(() => { input.focus(); input.select(); }, 60);
+      }
+
+
+      // ---------------------------------------------------------------- favori (clic droit dans la barre de favoris)
+      function bookmarkMenu(d) {
+        const list = () => C.load('bookmarks', C.defaultBookmarks);
+        // le favori peut être dans la barre ou dans un dossier
+        const locate = (all, url) => {
+          let i = all.findIndex((x) => !x.folder && x.url === url);
+          if (i >= 0) return { arr: all, i, folder: null };
+          for (const f of all) if (f.folder) { i = (f.children || []).findIndex((x) => x.url === url); if (i >= 0) return { arr: f.children, i, folder: f }; }
+          return null;
+        };
+        const loc0 = locate(list(), d.url);
+        if (!loc0) { done(); return; }
+        const b = loc0.arr[loc0.i];
+        const edit = (patch) => {
+          const all = list();
+          const l = locate(all, b.url);
+          if (!l) return;
+          Object.assign(l.arr[l.i], patch);
+          C.save('bookmarks', all);
+          Object.assign(b, patch);
+        };
+        titleRow(b.title || C.hostOf(b.url), C.favicon(b.url));
+        const sec = document.createElement('div');
+        sec.className = 'sec';
+        const h = document.createElement('h3');
+        h.textContent = 'Nom et adresse';
+        const name = document.createElement('input');
+        name.className = 'name';
+        name.placeholder = 'Nom du favori';
+        name.value = b.title || '';
+        name.maxLength = 60;
+        const addr = document.createElement('input');
+        addr.className = 'name';
+        addr.placeholder = 'https://…';
+        addr.value = b.url;
+        addr.style.marginTop = '8px';
+        const saveName = () => { const v = name.value.trim(); if (v && v !== b.title) edit({ title: v }); };
+        const saveAddr = () => {
+          let v = addr.value.trim();
+          if (!v || v === b.url) return;
+          if (!/^[a-z]+:\/\//i.test(v)) v = 'https://' + v;
+          try { new URL(v); } catch { addr.value = b.url; return; }
+          if (locate(list(), v)) { addr.value = b.url; return; }
+          edit({ url: v });
+        };
+        for (const [el, save] of [[name, saveName], [addr, saveAddr]]) {
+          el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { save(); done(); } if (e.key === 'Escape') done(); });
+          el.addEventListener('change', save);
+        }
+        sec.append(h, name, addr);
+        card.append(sec);
+        const l = section('Actions');
+        l.append(item(I.reopen, 'Ouvrir', () => { C.invoke('navigate', { url: b.url }); done(); }));
+        l.append(item(I.plus, 'Ouvrir dans un nouvel onglet', () => { C.invoke('new_tab', { url: b.url }); done(); }, { kbd: 'Ctrl+clic' }));
+        // dossiers
+        const fl = section('Dossier');
+        const move = (fn) => { const all = list(); const l2 = locate(all, b.url); if (!l2) return; const [it] = l2.arr.splice(l2.i, 1); fn(all, it, l2); C.save('bookmarks', all); done(); };
+        for (const f of list().filter((x) => x.folder)) {
+          if (loc0.folder && loc0.folder.id === f.id) continue;
+          fl.append(item(I.folder, 'Déplacer dans « ' + (f.title || 'Dossier') + ' »', () => move((all, it) => { const ff = all.find((x) => x.folder && x.id === f.id); (ff.children = ff.children || []).push(it); })));
+        }
+        if (loc0.folder) fl.append(item(I.open, 'Sortir du dossier', () => move((all, it) => all.push(it))));
+        else fl.append(item(I.plus, 'Nouveau dossier avec ce favori', () => move((all, it, l2) => all.splice(l2.i, 0, { id: 'f' + Date.now().toString(36), title: 'Nouveau dossier', folder: true, children: [it] }))));
+        const z = section('');
+        z.append(item(I.close, 'Supprimer le favori', () => {
+          const all = list(); const l2 = locate(all, b.url);
+          if (l2) { l2.arr.splice(l2.i, 1); C.save('bookmarks', all); }
+          done();
+        }, { danger: true }));
+        setTimeout(() => { name.focus(); name.select(); }, 60);
+      }
+
+      // ---------------------------------------------------------------- espaces
+      // Ensembles d'onglets (Perso, Travail…) : changer d'espace, en créer, renommer, colorer, supprimer.
+      function spacesMenu(d) {
+        titleRow('Espaces');
+        const cur = d.space || 0;
+        const l = section('');
+        for (const sp of d.spaces || []) {
+          const b = item('<i class="dot"></i>', sp.name, () => C.invoke('space_action', { action: 'switch', id: sp.id }));
+          b.querySelector('.dot').style.cssText = 'background:' + sp.color + ';color:' + sp.color;
+          const n = document.createElement('span');
+          n.className = 'cnt';
+          n.style.flex = 'none';
+          n.textContent = (d.counts && d.counts[sp.id] || 0) + ' onglet' + ((d.counts && d.counts[sp.id] || 0) > 1 ? 's' : '');
+          b.append(n);
+          if (sp.id === cur) { b.insertAdjacentHTML('beforeend', I.check); b.style.background = 'var(--hover)'; }
+          l.append(b);
+        }
+        const add = document.createElement('div');
+        add.className = 'sec';
+        const h = document.createElement('h3'); h.textContent = 'Nouvel espace';
+        const inp = document.createElement('input');
+        inp.className = 'name'; inp.placeholder = 'Nom (ex. Travail) puis Entrée'; inp.maxLength = 30;
+        inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') C.invoke('space_action', { action: 'new', name: inp.value }); if (e.key === 'Escape') done(); });
+        add.append(h, inp);
+        card.append(add);
+        const me = (d.spaces || []).find((s) => s.id === cur);
+        if (me) {
+          const ed = document.createElement('div');
+          ed.className = 'sec';
+          const h2 = document.createElement('h3'); h2.textContent = 'Espace « ' + me.name + ' »';
+          const nm = document.createElement('input');
+          nm.className = 'name'; nm.value = me.name; nm.maxLength = 30;
+          nm.addEventListener('change', () => C.invoke('space_action', { action: 'rename', id: me.id, name: nm.value }));
+          nm.addEventListener('keydown', (e) => { if (e.key === 'Enter') { C.invoke('space_action', { action: 'rename', id: me.id, name: nm.value }); done(); } });
+          const colors = document.createElement('div');
+          colors.className = 'colors';
+          for (const c of ['#9aa0a6', '#5b8cff', '#4cd38a', '#ff9f43', '#a77bff', '#ff4f7b', '#3ccfe0', '#ffd166']) {
+            const s = document.createElement('button');
+            s.className = 'sw' + (c === me.color ? ' sel' : '');
+            s.style.background = c; s.style.boxShadow = '0 0 10px ' + c + '66';
+            s.addEventListener('click', () => { C.invoke('space_action', { action: 'color', id: me.id, color: c }); colors.querySelectorAll('.sw').forEach((x) => x.classList.toggle('sel', x === s)); });
+            colors.append(s);
+          }
+          ed.append(h2, nm, colors);
+          card.append(ed);
+          if (me.id !== 0) {
+            const l2 = section('');
+            l2.append(item(I.close, 'Supprimer l’espace (ses onglets vont dans Principal)', () => C.invoke('space_action', { action: 'delete', id: me.id }), { danger: true }));
+          }
+        }
+        setTimeout(() => inp.focus(), 60);
+      }
+
+      // ---------------------------------------------------------------- notes du site
+      function notesMenu() {
+        C.invoke('note_get').then((n) => {
+          card.replaceChildren();
+          titleRow('Notes · ' + (n && n.site ? n.site : 'cette page'), n && n.site ? C.favicon('https://' + n.site) : null);
+          if (!n || !n.site) {
+            const p = document.createElement('div');
+            p.className = 'note-foot';
+            p.textContent = 'Les notes s’attachent à un site : ouvrez une page web.';
+            card.append(p);
+            C.invoke('popup_fit', { height: Math.ceil(card.getBoundingClientRect().height) + 4 }); // mesure immédiate : une fenêtre cachée (Mac) ne dessine pas d'image
+            return;
+          }
+          const ta = document.createElement('textarea');
+          ta.className = 'note-area';
+          ta.placeholder = 'Vos notes pour ' + n.site + ' : idées, codes, rappels… (enregistrées automatiquement)';
+          ta.value = n.text || '';
+          const foot = document.createElement('div');
+          foot.className = 'note-foot';
+          const state = document.createElement('span');
+          state.textContent = n.text ? 'Enregistré' : '';
+          const hint = document.createElement('span');
+          hint.textContent = 'Visible sur toutes les pages de ce site';
+          foot.append(hint, state);
+          let t = 0;
+          const save = () => { C.invoke('note_set', { site: n.site, text: ta.value }); state.textContent = 'Enregistré'; };
+          ta.addEventListener('input', () => { state.textContent = '…'; clearTimeout(t); t = setTimeout(save, 400); });
+          ta.addEventListener('blur', () => { clearTimeout(t); save(); });
+          ta.addEventListener('keydown', (e) => { if (e.key === 'Escape') { clearTimeout(t); save(); done(); } });
+          card.append(ta, foot);
+          C.invoke('popup_fit', { height: Math.ceil(card.getBoundingClientRect().height) + 4 }); // mesure immédiate : une fenêtre cachée (Mac) ne dessine pas d'image
+          setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 60);
+        });
+      }
+
+      // ---------------------------------------------------------------- dossier de favoris
+      function folderMenu(d) {
+        const all = C.load('bookmarks', C.defaultBookmarks);
+        const f = all.find((x) => x.folder && x.id === d.id);
+        if (!f) { done(); return; }
+        titleRow(f.title || 'Dossier');
+        const kids = f.children || [];
+        const l = section('');
+        if (!kids.length) {
+          const e = document.createElement('div');
+          e.className = 'note-foot';
+          e.textContent = 'Dossier vide : clic droit sur un favori › « Déplacer dans un dossier ».';
+          card.lastChild.append(e);
+        }
+        kids.forEach((b, i) => {
+          const r = item('<img class="fv" alt="">', b.title || C.hostOf(b.url), (e) => {
+            if (e.ctrlKey) C.invoke('new_tab', { url: b.url }); else C.invoke('navigate', { url: b.url });
+            done();
+          });
+          const im = r.querySelector('img'); im.src = C.favicon(b.url); im.onerror = () => { im.style.visibility = 'hidden'; };
+          r.title = b.url + '\nCtrl+clic : nouvel onglet';
+          // retirer du dossier : remis dans la barre
+          const out = document.createElement('span');
+          out.className = 'cnt';
+          out.style.flex = 'none';
+          out.title = 'Remettre dans la barre';
+          out.innerHTML = I.close;
+          out.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const list = C.load('bookmarks', C.defaultBookmarks);
+            const ff = list.find((x) => x.folder && x.id === d.id);
+            if (!ff) return;
+            const [moved] = ff.children.splice(i, 1);
+            list.push(moved);
+            C.save('bookmarks', list);
+            done();
+          });
+          r.append(out);
+          l.append(r);
+        });
+        const a = section('Dossier');
+        a.append(item(I.open, 'Tout ouvrir dans de nouveaux onglets', () => { kids.forEach((b) => C.invoke('new_tab', { url: b.url })); done(); }, { disabled: !kids.length }));
+        const nm = document.createElement('input');
+        nm.className = 'name'; nm.value = f.title || ''; nm.maxLength = 40; nm.placeholder = 'Nom du dossier';
+        nm.style.margin = '10px 0 0';
+        const rename = () => { const v = nm.value.trim(); if (!v) return; const list = C.load('bookmarks', C.defaultBookmarks); const ff = list.find((x) => x.folder && x.id === d.id); if (ff) { ff.title = v; C.save('bookmarks', list); } };
+        nm.addEventListener('change', rename);
+        nm.addEventListener('keydown', (e) => { if (e.key === 'Enter') { rename(); done(); } });
+        card.lastChild.append(nm);
+        const z = section('');
+        z.append(item(I.close, 'Supprimer le dossier (ses favoris restent dans la barre)', () => {
+          const list = C.load('bookmarks', C.defaultBookmarks);
+          const i = list.findIndex((x) => x.folder && x.id === d.id);
+          if (i >= 0) { const ff = list[i]; list.splice(i, 1, ...(ff.children || [])); C.save('bookmarks', list); }
+          done();
+        }, { danger: true }));
+      }
+
+      // ---------------------------------------------------------------- palette de commandes (Ctrl+K)
+      function palette(d) {
+        card.classList.add('pal');
+        const q = document.createElement('div');
+        q.className = 'q';
+        q.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>';
+        const input = document.createElement('input');
+        input.placeholder = 'Rechercher un onglet, un favori, l’historique ou une action…';
+        q.append(input);
+        const res = document.createElement('div');
+        res.className = 'res';
+        const foot = document.createElement('div');
+        foot.className = 'foot';
+        foot.innerHTML = '<span><b>↑ ↓</b> naviguer</span><span><b>Entrée</b> ouvrir</span><span><b>Échap</b> fermer</span>';
+        card.append(q, res, foot);
+        const actions = [
+          [I.plus, 'Nouvel onglet', 'Ctrl+T', () => C.invoke('new_tab', {})],
+          [I.reopen, 'Rouvrir l’onglet fermé', 'Ctrl+Maj+T', () => C.invoke('reopen_closed'), d.closed],
+          [I.history, 'Historique', 'Ctrl+H', () => C.invoke('open_library', { section: 'history' })],
+          [I.download, 'Téléchargements', 'Ctrl+J', () => C.invoke('open_library', { section: 'downloads' })],
+          [I.find, 'Rechercher dans la page', 'Ctrl+F', () => C.invoke('find_open'), d.page],
+          [I.book, 'Mode lecture', '', () => C.invoke('reader_toggle'), d.page],
+          [I.spark, 'Résumer la page avec l’IA', '', () => C.invoke('ai_summarize'), d.page],
+          [I.spark, 'Traduire la page en français', '', () => C.invoke('translate_page'), d.page],
+          [I.spark, 'Agent IA : agir sur la page…', '', () => C.invoke('agent_open')],
+          [I.spark, 'Comparateur de prix et codes promo', '', () => C.invoke('toggle_ext_panel', { view: 'shop' }), d.page],
+          [I.split, 'Vue côte à côte (nouvel onglet à droite)', '', () => C.invoke('split_open', { id: null })],
+          [I.book, 'Lire plus tard (page actuelle)', '', () => C.invoke('read_later_add', { id: null }), d.page],
+          [I.book, 'Liste de lecture', '', () => C.invoke('open_library', { section: 'readlater' })],
+          [I.edit, 'Notes de ce site', '', () => C.invoke('popup_show', { kind: 'notes', x: 400, y: 88 }), d.page],
+          [I.plus, 'Nouvel espace', '', () => C.invoke('space_action', { action: 'new' })],
+          [I.find, 'Mode concentration : 25 min', '', () => C.invoke('focus_start', { minutes: 25 })],
+          [I.find, 'Mode concentration : 50 min', '', () => C.invoke('focus_start', { minutes: 50 })],
+          [I.close, 'Arrêter le mode concentration', '', () => C.invoke('focus_stop')],
+          [I.full, 'Capture d’écran (choisir une zone)', 'Ctrl+Maj+S', () => C.invoke('capture_page', { mode: 'area' }), d.page],
+          [I.full, 'Capture de la page entière', '', () => C.invoke('capture_page', { mode: 'full' }), d.page],
+          [I.note, 'Couper / remettre le son de l’onglet', 'Alt+M', () => C.invoke('run_action_cmd', { action: 'mute_tab' }), d.page],
+          [I.panel, 'Vidéo en lecteur flottant', 'Alt+P', () => C.invoke('run_action_cmd', { action: 'pip' }), d.page],
+          [I.panel, d.sidebar ? 'Fermer le panneau IA' : 'Ouvrir le panneau IA', '', () => C.invoke('toggle_sidebar')],
+          [I.zoom, 'Revenir au zoom 100 %', 'Ctrl+0', () => C.invoke('zoom_active', { dir: 'reset' }), Math.abs((d.zoom || 1) - 1) > 0.01],
+          [I.full, 'Plein écran', 'F11', () => C.invoke('toggle_fullscreen')]
+        ].filter((a) => a[4] === undefined || a[4]);
+        const bms = C.load('bookmarks', C.defaultBookmarks) || [];
+        let rows = [], sel = 0, hist = [], seq = 0;
+        const norm = (x) => (x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        const has = (text, q) => !q || norm(text).includes(q);
+        function row(list, icon, label, hint, fn) {
+          const b = item(icon, label, () => { fn(); done(); }, hint ? { kbd: hint } : null);
+          list.append(b);
+          rows.push(b);
+          return b;
+        }
+        function fav(url, favicon) { return '<img src="' + String(favicon || C.favicon(url)).replace(/"/g, '&quot;') + '" alt="" onerror="this.style.visibility=\'hidden\'">'; }
+        function render() {
+          const qq = norm(input.value.trim());
+          res.replaceChildren();
+          rows = [];
+          const card0 = card;
+          const sectionIn = (title) => { const sec = document.createElement('div'); sec.className = 'sec'; const h = document.createElement('h3'); h.textContent = title; const l = document.createElement('div'); l.className = 'list'; sec.append(h, l); res.append(sec); return l; };
+          const tabs = (d.tabs || []).filter((t) => has(t.title + ' ' + t.url, qq));
+          if (tabs.length) {
+            const l = sectionIn('Onglets ouverts');
+            tabs.slice(0, qq ? 6 : 8).forEach((t) => {
+              const b = row(l, t.url ? fav(t.url, t.favicon) : '<img src="icon.png" alt="">', t.title || 'Nouvel onglet', t.active ? 'affiché' : (t.asleep ? 'en veille' : ''), () => C.invoke('activate_tab', { id: t.id }));
+              if (t.url) { const sm = document.createElement('small'); sm.textContent = C.hostOf(t.url); b.insertBefore(sm, b.querySelector('kbd')); }
+            });
+          }
+          const acts = actions.filter((a) => has(a[1], qq));
+          if (acts.length) {
+            const l = sectionIn('Actions');
+            acts.slice(0, qq ? 5 : 6).forEach((a) => row(l, a[0], a[1], a[2], a[3]));
+          }
+          const bm = qq ? bms.filter((b) => has(b.name + ' ' + b.url, qq)) : [];
+          if (bm.length) {
+            const l = sectionIn('Favoris');
+            bm.slice(0, 4).forEach((b) => row(l, fav(b.url), b.name || C.hostOf(b.url), C.hostOf(b.url), () => C.invoke('palette_go', { url: b.url })));
+          }
+          if (hist.length) {
+            const l = sectionIn(qq ? 'Historique' : 'Pages récentes');
+            hist.slice(0, qq ? 5 : 4).forEach((h) => row(l, fav(h.url), h.title || C.hostOf(h.url), C.hostOf(h.url), () => C.invoke('palette_go', { url: h.url })));
+          }
+          if (input.value.trim()) {
+            const l = sectionIn('Web');
+            const text = input.value.trim();
+            const url = C.toUrl(text);
+            const isSearch = /google\.[a-z.]+\/search/.test(url);
+            row(l, I.find, isSearch ? 'Rechercher « ' + text + ' » avec Corrtex' : 'Ouvrir ' + text, 'Entrée', () => C.invoke('palette_go', { url }));
+          }
+          if (!rows.length) { const e = document.createElement('div'); e.className = 'empty'; e.textContent = 'Aucun résultat'; res.append(e); }
+          // avec une recherche : la recherche web en premier choix si rien d'autre ne correspond
+          sel = 0;
+          mark();
+          C.invoke('popup_fit', { height: Math.ceil(card0.getBoundingClientRect().height) + 4 }); // mesure immédiate : une fenêtre cachée (Mac) ne dessine pas d'image
+        }
+        function mark() {
+          rows.forEach((r, i) => r.classList.toggle('sel', i === sel));
+          const r = rows[sel];
+          if (r) r.scrollIntoView({ block: 'nearest' });
+        }
+        async function refreshHistory() {
+          const my = ++seq;
+          const list = await C.invoke('history_list', { query: input.value.trim(), limit: 8 }).catch(() => []);
+          if (my !== seq) return;
+          hist = list || [];
+          render();
+        }
+        input.addEventListener('input', () => { render(); refreshHistory(); });
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); sel = Math.min(rows.length - 1, sel + 1); mark(); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); sel = Math.max(0, sel - 1); mark(); }
+          else if (e.key === 'Enter') { e.preventDefault(); if (rows[sel]) rows[sel].click(); }
+          else if (e.key === 'Escape') { e.preventDefault(); done(); }
+        });
+        render();
+        refreshHistory();
+        setTimeout(() => input.focus(), 30);
+      }
+
+      function preview(d) {
+        const t = d.tab;
+        card.classList.add('pv');
+        const top = document.createElement('div');
+        top.className = 'top';
+        const img = document.createElement('img');
+        img.src = t.url ? (t.favicon || C.favicon(t.url)) : 'icon.png';
+        img.onerror = function () { this.style.visibility = 'hidden'; };
+        const box = document.createElement('div');
+        box.style.minWidth = '0';
+        const title = document.createElement('div');
+        title.className = 't';
+        title.textContent = t.title || 'Nouvel onglet';
+        const url = document.createElement('div');
+        url.className = 'u';
+        url.textContent = t.url ? C.hostOf(t.url) : 'Page d’accueil Corrtex';
+        box.append(title, url);
+        top.append(img, box);
+        card.append(top);
+        const badges = document.createElement('div');
+        badges.className = 'badges';
+        const badge = (icon, text, cls) => { const b = document.createElement('span'); b.className = 'badge' + (cls ? ' ' + cls : ''); b.innerHTML = icon; b.append(document.createTextNode(text)); badges.append(b); return b; };
+        if (t.asleep) badge(I.sleep, 'En veille · mémoire libérée');
+        if (t.playing) badge(I.note, 'Lecture en cours');
+        if (t.pinned) badge(I.pin, 'Épinglé');
+        if (d.group) { const b = badge('<i></i>', d.group.name || 'Groupe', 'g'); b.style.setProperty('--gc', d.group.color); }
+        if (badges.children.length) card.append(badges);
+      }
+
+      let shownAt = 0;
+      function render(d) {
+        if (!mine(d)) return;
+        shownAt = Date.now();
+        card.replaceChildren();
+        card.className = '';
+        if (d.kind === 'tab') tabMenu(d);
+        else if (d.kind === 'group') groupMenu(d);
+        else if (d.kind === 'bookmark') bookmarkMenu(d);
+        else if (d.kind === 'spaces') spacesMenu(d);
+        else if (d.kind === 'notes') notesMenu(d);
+        else if (d.kind === 'bmfolder') folderMenu(d);
+        else if (d.kind === 'preview') preview(d);
+        else if (d.kind === 'palette') { palette(d); return; }
+        // la fenêtre prend exactement la taille de la carte
+        C.invoke('popup_fit', { height: Math.ceil(card.getBoundingClientRect().height) + 4 }); // mesure immédiate : une fenêtre cachée (Mac) ne dessine pas d'image
+      }
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(); });
+      // clic en dehors du menu (autre fenêtre, autre application) : il se ferme
+      window.addEventListener('blur', () => {
+        if (C.win().startsWith('prvw-')) return;
+        setTimeout(() => { if (!document.hasFocus() && Date.now() - shownAt > 350) done(); }, 120);
+      });
+      document.addEventListener('mousedown', (e) => { if (!card.contains(e.target)) done(); });
+      document.addEventListener('contextmenu', (e) => e.preventDefault());
+      document.documentElement.style.setProperty('--l1', C.prefs().light || '#ff4f7b');
+      C.listen('popup-data', render);
+      C.invoke('popup_get').then(render);
+    })();
+  </script>
+</body>
+</html>

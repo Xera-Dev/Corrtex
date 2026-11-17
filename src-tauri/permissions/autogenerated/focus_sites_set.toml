@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-focus-sites-set"
+description = "Enables the focus_sites_set command without any pre-configured scope."
+commands.allow = ["focus_sites_set"]
+
+[[permission]]
+identifier = "deny-focus-sites-set"
+description = "Denies the focus_sites_set command without any pre-configured scope."
+commands.deny = ["focus_sites_set"]

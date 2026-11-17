@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-update-repo"
+description = "Enables the set_update_repo command without any pre-configured scope."
+commands.allow = ["set_update_repo"]
+
+[[permission]]
+identifier = "deny-set-update-repo"
+description = "Denies the set_update_repo command without any pre-configured scope."
+commands.deny = ["set_update_repo"]

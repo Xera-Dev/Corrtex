@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Nouveautés de Corrtex</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="ambient.css">
+<script src="common.js"></script>
+<script src="ambient.js"></script>
+<style>
+  /* nouveautés de la version */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--fg); background: linear-gradient(180deg, var(--page-1), var(--page-2)); }
+  #scroll { position: relative; z-index: 1; height: 100%; overflow-y: auto; }
+  .wrap { width: min(760px, 92vw); margin: 0 auto; padding: 46px 0 60px; }
+  h1 { font-size: 30px; font-weight: 700; letter-spacing: -.5px; }
+  .v { color: var(--fg-dim); margin: 4px 0 26px; }
+  .card { padding: 22px 24px; border-radius: 24px; background: var(--card); border: 1px solid var(--glass-border); backdrop-filter: blur(28px) saturate(1.4); -webkit-backdrop-filter: blur(28px) saturate(1.4);
+          box-shadow: 0 18px 50px rgba(0,0,0,.25); margin-bottom: 16px; }
+  h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+  h2 i { width: 10px; height: 10px; border-radius: 50%; background: var(--l1, #ff4f7b); box-shadow: 0 0 10px var(--l1, #ff4f7b); }
+  ul { list-style: none; display: flex; flex-direction: column; gap: 2px; border-radius: 16px; overflow: hidden; }
+  li { padding: 10px 14px; background: var(--glass); }
+  li b { font-weight: 600; }
+  li span { color: var(--fg-dim); }
+</style>
+</head>
+<body>
+  <div id="scroll"><div class="wrap">
+    <h1>Nouveautés de Corrtex</h1>
+    <div class="v" id="ver">Version 0.2</div>
+
+    <div class="card"><h2><i></i>Intelligence artificielle</h2><ul>
+      <li><b>Agent de navigation</b> — <span>l’IA agit sur la page, vous validez chaque action.</span></li>
+      <li><b>Comparateur de prix</b> — <span>meilleurs prix, historique sur 3 mois et codes promo, sur les fiches produit.</span></li>
+      <li><b>Traduction de page</b>, <b>résumé de vidéos YouTube</b>, <b>réécriture dans les champs</b> et <b>recherche dans l’historique</b> en langage naturel.</li>
+    </ul></div>
+
+    <div class="card"><h2><i></i>Organisation</h2><ul>
+      <li><b>Espaces</b> — <span>des ensembles d’onglets (Perso, Travail…).</span></li>
+      <li><b>Vue côte à côte</b> — <span>deux pages dans la même fenêtre (Alt+S).</span></li>
+      <li><b>Lire plus tard</b>, <b>notes par site</b> et <b>dossiers de favoris</b>.</li>
+    </ul></div>
+
+    <div class="card"><h2><i></i>Au quotidien</h2><ul>
+      <li><b>Capture d’écran annotée</b> (Ctrl+Maj+S), <b>son par onglet</b>, <b>lecteur vidéo flottant</b>.</li>
+      <li><b>Gestes de la souris</b> et <b>raccourcis personnalisables</b>.</li>
+      <li><b>Mots de passe forts</b> proposés à la création d’un compte.</li>
+    </ul></div>
+
+    <div class="card"><h2><i></i>Personnalisation et technique</h2><ul>
+      <li><b>Fonds d’écran</b> (dégradés animés, image ou vidéo) et <b>widgets</b> (horloge, météo, tâches, citation).</li>
+      <li><b>Mode concentration</b> — <span>barre réduite et sites qui distraient bloqués.</span></li>
+      <li><b>Profils</b> — <span>connexions et cookies séparés, chacun dans sa fenêtre.</span></li>
+      <li><b>Économie d’énergie</b> et <b>mises à jour</b> vérifiées depuis votre dépôt GitHub.</li>
+      <li><b>Plus rapide</b> — <span>interface mise à jour par lots, mémoire réduite pour les onglets cachés, compilation optimisée.</span></li>
+    </ul></div>
+  </div></div>
+  <script>
+    window.Corrtex.invoke('app_info').then((i) => { if (i) document.getElementById('ver').textContent = 'Version ' + i.version; }).catch(() => {});
+  </script>
+</body>
+</html>

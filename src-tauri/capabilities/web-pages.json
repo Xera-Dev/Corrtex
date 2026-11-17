@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "web-pages",
+  "description": "Sites web ouverts dans les onglets : ils ne peuvent QUE signaler leur titre, icône et lecture média à leur propre onglet.",
+  "windows": [
+    "*"
+  ],
+  "webviews": [
+    "tab-*"
+  ],
+  "remote": {
+    "urls": [
+      "https://*",
+      "http://*"
+    ]
+  },
+  "permissions": [
+    "allow-tab-event"
+  ]
+}

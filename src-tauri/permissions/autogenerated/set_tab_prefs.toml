@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-tab-prefs"
+description = "Enables the set_tab_prefs command without any pre-configured scope."
+commands.allow = ["set_tab_prefs"]
+
+[[permission]]
+identifier = "deny-set-tab-prefs"
+description = "Denies the set_tab_prefs command without any pre-configured scope."
+commands.deny = ["set_tab_prefs"]

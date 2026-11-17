@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-focus-media-tab"
+description = "Enables the focus_media_tab command without any pre-configured scope."
+commands.allow = ["focus_media_tab"]
+
+[[permission]]
+identifier = "deny-focus-media-tab"
+description = "Denies the focus_media_tab command without any pre-configured scope."
+commands.deny = ["focus_media_tab"]

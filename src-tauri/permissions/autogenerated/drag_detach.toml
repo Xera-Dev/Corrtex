@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-drag-detach"
+description = "Enables the drag_detach command without any pre-configured scope."
+commands.allow = ["drag_detach"]
+
+[[permission]]
+identifier = "deny-drag-detach"
+description = "Denies the drag_detach command without any pre-configured scope."
+commands.deny = ["drag_detach"]
