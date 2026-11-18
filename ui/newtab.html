@@ -281,7 +281,15 @@
       <div class="chips" style="margin-top:8px" id="update-install-row" hidden>
         <button class="chip sel" id="update-install">Installer et redémarrer</button>
       </div>
-      <p class="hint" style="margin-top:12px">Corrtex vérifie les nouvelles versions au démarrage puis toutes les 6 heures (github.com/Xera-Dev/Corrtex).</p>
+      <div class="row" style="margin-top:14px">
+        <span class="hint" style="margin:0">Installer les mises à jour automatiquement au démarrage</span>
+        <label class="switch"><input type="checkbox" id="set-autoupdate"><span></span></label>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <span class="hint" style="margin:0">Garder Corrtex ouvert dans la barre des tâches quand on ferme la fenêtre (réouverture instantanée)</span>
+        <label class="switch"><input type="checkbox" id="set-keeprunning"><span></span></label>
+      </div>
+      <p class="hint" style="margin-top:12px">Corrtex vérifie les nouvelles versions à chaque lancement puis toutes les 6 heures (github.com/Xera-Dev/Corrtex). Pour quitter complètement : Outils › Quitter Corrtex.</p>
     </div>
   </section>
 

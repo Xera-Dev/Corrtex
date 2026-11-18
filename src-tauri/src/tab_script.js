@@ -909,6 +909,15 @@
     return sv;
   }
 
+  // ---------------------------------------------------------------- plein écran des vidéos
+  // Le bouton plein écran d'une vidéo (YouTube…) ne remplit que la zone de l'onglet : Corrtex
+  // met alors toute la fenêtre en plein écran, et la rétablit à la sortie.
+  (function () {
+    function changed() { send('page_fullscreen', !!(document.fullscreenElement || document.webkitFullscreenElement)); }
+    document.addEventListener('fullscreenchange', changed);
+    document.addEventListener('webkitfullscreenchange', changed);
+  })();
+
   // ---------------------------------------------------------------- recherche d'achat de l'agent
   // Panneau en verre (comme le comparateur et les réglages) dessiné dans la page de l'onglet
   // affiché. La recherche tourne dans un moteur caché de Corrtex : il envoie ici son état

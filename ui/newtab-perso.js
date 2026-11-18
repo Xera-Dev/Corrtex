@@ -364,6 +364,8 @@
     }
     $('power-state').textContent = i.power_saver ? 'Économie d’énergie active.' + (i.on_battery ? ' (sur batterie)' : '') : (i.on_battery ? 'Sur batterie.' : 'Sur secteur.');
     $('about-version').textContent = 'Version ' + i.version;
+    $('set-autoupdate').checked = i.auto_update !== false;
+    $('set-keeprunning').checked = i.keep_running !== false;
     return i;
   }
   C.listen('power-saver', () => renderAbout());
@@ -395,6 +397,8 @@
     m.textContent = p.error ? 'La mise à jour a échoué : ' + p.error : p.pct >= 100 ? 'Installation, Corrtex va redémarrer…' : 'Téléchargement ' + p.pct + ' %';
   });
   $('update-install').onclick = installUpdate;
+  $('set-autoupdate').addEventListener('change', (e) => C.invoke('set_app_prefs', { autoUpdate: e.target.checked }));
+  $('set-keeprunning').addEventListener('change', (e) => C.invoke('set_app_prefs', { keepRunning: e.target.checked }));
   $('update-btn').onclick = () => checkUpdate(false);
 
   // ---------------------------------------------------------------- message en bas de page

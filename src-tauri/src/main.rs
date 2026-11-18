@@ -137,6 +137,10 @@ struct Win {
     maximized: bool,
     /// plein écran (F11) : la barre du navigateur est masquée
     fullscreen: bool,
+    /// plein écran demandé par la page (vidéo YouTube…) : l'onglet occupe tout l'écran
+    page_fs: bool,
+    /// la fenêtre a été mise en plein écran pour la page (à rétablir à la sortie)
+    page_fs_window: bool,
     /// hauteur ajoutée à l'en-tête du panneau IA (liste « Comparer des onglets » dépliée)
     aibar_extra: f64,
     /// site dont la conversation est affichée dans le panneau IA (mémoire par site)
@@ -280,6 +284,12 @@ struct Settings {
     /// économie d'énergie : « auto » (sur batterie), « on », « off »
     #[serde(default = "default_power")]
     power_mode: String,
+    /// mises à jour installées toutes seules au démarrage
+    #[serde(default = "yes")]
+    auto_update: bool,
+    /// fermer la dernière fenêtre la réduit dans la barre des tâches (réouverture instantanée)
+    #[serde(default = "yes")]
+    keep_running: bool,
 }
 
 fn default_focus_sites() -> Vec<String> {
@@ -323,7 +333,7 @@ fn default_side_w() -> f64 {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { ai_provider: "claude".into(), sidebar_open: false, ai_skin: true, sidebar_w: 400.0, ai_memory: true, ai_chats: HashMap::new(), restore_session: true, sleep_min: 30, zooms: HashMap::new(), save_history: true, notes: HashMap::new(), read_later: Vec::new(), keys: HashMap::new(), gestures: true, focus_sites: default_focus_sites(), update_repo: String::new(), last_version: String::new(), profiles: Vec::new(), power_mode: default_power() }
+        Settings { ai_provider: "claude".into(), sidebar_open: false, ai_skin: true, sidebar_w: 400.0, ai_memory: true, ai_chats: HashMap::new(), restore_session: true, sleep_min: 30, zooms: HashMap::new(), save_history: true, notes: HashMap::new(), read_later: Vec::new(), keys: HashMap::new(), gestures: true, focus_sites: default_focus_sites(), update_repo: String::new(), last_version: String::new(), profiles: Vec::new(), power_mode: default_power(), auto_update: true, keep_running: true }
     }
 }
 
@@ -343,6 +353,10 @@ struct Browser {
     shopping_open: HashMap<String, u32>,
     /// historique des recherches de l'agent (achats et réponses), le plus récent en dernier
     agent_history: Vec<serde_json::Value>,
+    /// fenêtres en cours de démarrage : écran de chargement affiché (au plus 2 s)
+    booting: std::collections::HashSet<String>,
+    /// Quitter Corrtex a été demandé : la dernière fenêtre se ferme vraiment
+    quitting: bool,
     /// nouvelle version de Corrtex disponible (numéro), installation en cours
     update_version: Option<String>,
     updating: bool,
@@ -709,7 +723,7 @@ fn content_rect(width: f64, height: f64, sidebar: bool, chrome_h: f64) -> (Logic
 /// Hauteur de la barre du navigateur : la barre de favoris se replie quand la page
 /// de l'onglet actif défile (0 à 30 px).
 fn chrome_height(b: &Browser, win: &str) -> f64 {
-    if b.windows.get(win).map(|w| w.fullscreen).unwrap_or(false) {
+    if b.windows.get(win).map(|w| w.fullscreen || w.page_fs).unwrap_or(false) {
         return 0.0;
     }
     // mode concentration : seulement la barre d'outils (ni onglets, ni favoris)
@@ -728,10 +742,26 @@ fn layout_with(app: &AppHandle, win: &str, width: f64, height: f64) {
     let Some((tab_ids, active, sidebar, ai_created, ch, bar_h)) = ({
         let b = state(app);
         let ch = chrome_height(&b, win);
-        b.windows.get(win).map(|w| (w.tabs.clone(), w.active, w.sidebar_open, w.ai_created, ch, AIBAR_H + w.aibar_extra))
+        // vidéo en plein écran : ni panneau IA ni vue côte à côte
+        b.windows.get(win).map(|w| (w.tabs.clone(), w.active, w.sidebar_open && !w.page_fs, w.ai_created, ch, AIBAR_H + w.aibar_extra))
     }) else {
         return;
     };
+    let page_fs = state(app).windows.get(win).map(|w| w.page_fs).unwrap_or(false);
+    // écran de chargement : la barre occupe toute la fenêtre, les pages se chargent cachées derrière
+    if state(app).booting.contains(win) {
+        if let Some(chrome) = app.get_webview(&format!("chrome-{win}")) {
+            set_bounds(&chrome, LogicalPosition::new(0.0, 0.0), LogicalSize::new(width, height));
+            let _ = chrome.show();
+        }
+        for id in tab_ids {
+            if let Some(wv) = app.get_webview(&tab_label(id)) {
+                set_bounds(&wv, LogicalPosition::new(0.0, ch), LogicalSize::new(width, (height - ch).max(50.0)));
+                let _ = wv.hide();
+            }
+        }
+        return;
+    }
 
     if let Some(chrome) = app.get_webview(&format!("chrome-{win}")) {
         if ch > 0.0 {
@@ -745,7 +775,7 @@ fn layout_with(app: &AppHandle, win: &str, width: f64, height: f64) {
 
     let (pos, size) = content_rect(width, height, sidebar, ch);
     // vue côte à côte : l'onglet actif à gauche, l'autre à droite (séparés de 6 px)
-    let split = state(app).windows.get(win).and_then(|w| w.split).filter(|s| Some(*s) != active && app.get_webview(&tab_label(*s)).is_some());
+    let split = state(app).windows.get(win).and_then(|w| w.split).filter(|s| !page_fs && Some(*s) != active && app.get_webview(&tab_label(*s)).is_some());
     let half = ((size.width - 6.0) / 2.0).floor();
     for id in tab_ids {
         if let Some(wv) = app.get_webview(&tab_label(id)) {
@@ -850,17 +880,41 @@ fn create_window(app: &AppHandle, position: Option<(f64, f64)>, size: Option<(f6
     };
     let window = builder.build().map_err(|e| e.to_string())?;
 
+    // première fenêtre au lancement : écran de chargement le temps que les pages se préparent
+    let boot = STARTUP.swap(false, std::sync::atomic::Ordering::Relaxed);
+    let mut chrome = web(format!("chrome-{label}"), WebviewUrl::App("chrome.html".into()));
+    if boot {
+        state(app).booting.insert(label.clone());
+        chrome = chrome.initialization_script("window.__corrtexBoot = true;");
+    }
     window
-        .add_child(
-            web(format!("chrome-{label}"), WebviewUrl::App("chrome.html".into())),
-            LogicalPosition::new(0.0, 0.0),
-            LogicalSize::new(w, CHROME_H),
-        )
+        .add_child(chrome, LogicalPosition::new(0.0, 0.0), if boot { LogicalSize::new(w, h) } else { LogicalSize::new(w, CHROME_H) })
         .map_err(|e| e.to_string())?;
+    if boot {
+        let (h2, l2) = (app.clone(), label.clone());
+        std::thread::spawn(move || {
+            std::thread::sleep(BOOT_MAX);
+            boot_done(&h2, &l2);
+        });
+    }
 
     let h = app.clone();
     let win = label.clone();
     window.on_window_event(move |event| match event {
+        // dernière fenêtre fermée avec « Garder Corrtex ouvert » : réduite dans la barre des tâches
+        WindowEvent::CloseRequested { api, .. } => {
+            if keep_open_on_close(&h, &win) {
+                api.prevent_close();
+                close_suggest(&h, &win);
+                close_popups(&h, &win);
+                dismiss_panel(&h, &win);
+                if let Some(w) = h.get_window(&win) {
+                    let _ = w.minimize();
+                }
+                save_session(&h);
+                save_history(&h);
+            }
+        }
         WindowEvent::Moved(_) => {
             close_suggest(&h, &win);
             close_popups(&h, &win);
@@ -938,6 +992,88 @@ fn create_window(app: &AppHandle, position: Option<(f64, f64)>, size: Option<(f6
         });
     }
     Ok(label)
+}
+
+static STARTUP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+const BOOT_MAX: Duration = Duration::from_millis(2000);
+
+/// Fin de l'écran de chargement : il s'efface en fondu, puis la fenêtre reprend sa disposition.
+fn boot_done(app: &AppHandle, win: &str) {
+    if !state(app).booting.contains(win) {
+        return;
+    }
+    if let Some(c) = app.get_webview(&format!("chrome-{win}")) {
+        let _ = c.eval("window.__corrtexBooted && window.__corrtexBooted()");
+    }
+    let (app2, win2) = (app.clone(), win.to_string());
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(220));
+        state(&app2).booting.remove(&win2);
+        layout(&app2, &win2);
+    });
+}
+
+/// Fermer cette fenêtre doit-il seulement la réduire ? (dernière fenêtre normale, réglage actif)
+fn keep_open_on_close(app: &AppHandle, win: &str) -> bool {
+    let b = state(app);
+    if b.quitting || !b.settings.keep_running {
+        return false;
+    }
+    let Some(w) = b.windows.get(win) else { return false };
+    !w.private && b.windows.iter().filter(|(l, x)| l.as_str() != win && !x.private).count() == 0
+}
+
+/// Quitter vraiment Corrtex (la session est enregistrée).
+fn quit_app(app: &AppHandle) {
+    state(app).quitting = true;
+    save_session(app);
+    save_history(app);
+    app.exit(0);
+}
+
+#[tauri::command]
+async fn app_quit(app: AppHandle) {
+    quit_app(&app);
+}
+
+/// Réglages du démarrage : mises à jour automatiques, garder Corrtex ouvert.
+#[tauri::command]
+async fn set_app_prefs(app: AppHandle, auto_update: Option<bool>, keep_running: Option<bool>) {
+    {
+        let mut b = state(&app);
+        if let Some(v) = auto_update {
+            b.settings.auto_update = v;
+        }
+        if let Some(v) = keep_running {
+            b.settings.keep_running = v;
+        }
+    }
+    save_settings(&app);
+}
+
+/// Corrtex relancé alors qu'il tourne déjà (réduit) : la fenêtre existante revient aussitôt ;
+/// une adresse passée en argument (lien ouvert depuis une autre application) s'ouvre dans un onglet.
+fn reopen_existing(app: &AppHandle, args: Vec<String>) {
+    let win = {
+        let b = state(app);
+        b.windows.iter().find(|(_, w)| !w.private).map(|(l, _)| l.clone()).or_else(|| b.windows.keys().next().cloned())
+    };
+    let Some(win) = win else {
+        if let Ok(w) = create_window(app, None, None) {
+            let _ = create_tab(app, &w, None);
+        }
+        return;
+    };
+    if let Some(w) = app.get_window(&win) {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+    for a in args.into_iter().skip(1) {
+        if a.starts_with("http://") || a.starts_with("https://") {
+            let _ = create_tab(app, &win, Some(a));
+        }
+    }
 }
 
 fn close_window(app: &AppHandle, win: &str) {
@@ -1143,6 +1279,13 @@ fn spawn_tab_view(app: &AppHandle, id: u32) -> Result<(), String> {
                 if finished {
                     let _ = wv.eval(&page_theme_js(&app_load));
                     let _ = wv.eval(&keys_js(&app_load));
+                    // première page prête : fin de l'écran de chargement
+                    if let Some(win) = win_of_tab(&app_load, id) {
+                        let active = state(&app_load).windows.get(&win).and_then(|w| w.active) == Some(id);
+                        if active && state(&app_load).booting.contains(&win) {
+                            boot_done(&app_load, &win);
+                        }
+                    }
                     // panneau de recherche d'achat ouvert dans cette fenêtre : il reste affiché sur la nouvelle page
                     if let Some(win) = win_of_tab(&app_load, id) {
                         let shown = state(&app_load).shopping_open.get(&win) == Some(&id);
@@ -1378,6 +1521,13 @@ fn activate_with(app: &AppHandle, id: u32, focus: bool) {
         if let Some(wv) = app.get_webview(&tab_label(id)) {
             let _ = wv.set_focus();
         }
+    }
+    // vidéo en plein écran dans l'onglet quitté : on en sort
+    if state(app).windows.get(&win).map(|w| w.page_fs).unwrap_or(false) {
+        if let Some(wv) = prev_shown.filter(|p| *p != id).and_then(|p| app.get_webview(&tab_label(p))) {
+            let _ = wv.eval("document.fullscreenElement && document.exitFullscreen()");
+        }
+        set_page_fullscreen(app, &win, false);
     }
     shopping_follow(app, &win);
     broadcast(app);
@@ -2445,6 +2595,7 @@ fn open_panel_window(app: &AppHandle, win: &str, page: &str, pos: LogicalPositio
     let main = app.get_window(win).ok_or("fenêtre introuvable")?;
     let scale = main.scale_factor().unwrap_or(1.0);
     let origin = main.inner_position().map_err(|e| e.to_string())?.to_logical::<f64>(scale);
+    let phys = main.inner_position().map_err(|e| e.to_string())?;
     let w = WindowBuilder::new(app, format!("panw-{win}"))
         .decorations(false)
         .transparent(true)
@@ -2458,6 +2609,9 @@ fn open_panel_window(app: &AppHandle, win: &str, page: &str, pos: LogicalPositio
         .focused(true)
         .build()
         .map_err(|e| e.to_string())?;
+    // même écran que la fenêtre principale (pixels réels : deux écrans peuvent avoir des échelles différentes)
+    let _ = w.set_position(tauri::PhysicalPosition::new(phys.x + (pos.x * scale).round() as i32, phys.y + (pos.y * scale).round() as i32));
+    let _ = w.set_size(tauri::PhysicalSize::new((size.width * scale).round() as u32, (size.height * scale).round() as u32));
     w.add_child(
         web(format!("panel-{win}"), WebviewUrl::App(page.into())).transparent(true).background_color(Color(0, 0, 0, 0)),
         LogicalPosition::new(0.0, 0.0),
@@ -2510,16 +2664,20 @@ fn open_popup(app: &AppHandle, win: &str, prefix: &str, mut data: serde_json::Va
     ensure_popup(app, win, prefix)?;
     let main = app.get_window(win).ok_or("fenêtre introuvable")?;
     let scale = main.scale_factor().unwrap_or(1.0);
-    let origin = main.inner_position().map_err(|e| e.to_string())?.to_logical::<f64>(scale);
+    let origin = main.inner_position().map_err(|e| e.to_string())?;
     let (ww, _) = window_logical_size(app, win);
     let x = x.min(ww - w - 8.0).max(4.0);
-    let pos = LogicalPosition::new(origin.x + x - POP_MARGIN, origin.y + y);
     let size = LogicalSize::new(w + 2.0 * POP_MARGIN, h + POP_MARGIN + 6.0);
+    // en pixels réels de l'écran de la fenêtre principale : avec deux écrans d'échelles différentes,
+    // une position « logique » serait convertie avec l'échelle de l'écran où la petite fenêtre
+    // se trouvait avant, d'où un aperçu à un endroit inattendu
+    let pos = tauri::PhysicalPosition::new(origin.x + ((x - POP_MARGIN) * scale).round() as i32, origin.y + (y * scale).round() as i32);
+    let psize = tauri::PhysicalSize::new((size.width * scale).round() as u32, (size.height * scale).round() as u32);
     let wlabel = format!("{prefix}-{win}");
     let vlabel = format!("{}-{win}", if prefix == "prvw" { "preview" } else { "popup" });
     if let Some(pw) = app.get_window(&wlabel) {
         let _ = pw.set_position(pos);
-        let _ = pw.set_size(size);
+        let _ = pw.set_size(psize);
     }
     if let Some(wv) = app.get_webview(&vlabel) {
         set_bounds(&wv, LogicalPosition::new(0.0, 0.0), size);
@@ -2551,11 +2709,12 @@ async fn popup_get(app: AppHandle, webview: Webview) -> Option<serde_json::Value
 async fn popup_fit(app: AppHandle, webview: Webview, height: f64) {
     let win = caller_win(&webview);
     let prefix = if webview.label().starts_with("preview-") { "prvw" } else { "popw" };
-    if let (Some(w), Ok(scale)) = (app.get_window(&format!("{prefix}-{win}")), webview.window().scale_factor()) {
+    let main_scale = app.get_window(&win).and_then(|m| m.scale_factor().ok());
+    if let (Some(w), Some(scale)) = (app.get_window(&format!("{prefix}-{win}")), main_scale.or_else(|| webview.window().scale_factor().ok())) {
         if let Ok(size) = w.inner_size() {
             let width = size.width as f64 / scale;
             let size = LogicalSize::new(width, height.clamp(40.0, 700.0) + POP_MARGIN + 6.0);
-            let _ = w.set_size(size);
+            let _ = w.set_size(tauri::PhysicalSize::new(size.width * scale, size.height * scale).cast::<u32>());
             set_bounds(&webview, LogicalPosition::new(0.0, 0.0), size);
         }
         // aperçu déjà fermé (la souris a quitté l'onglet) : on ne le montre pas
@@ -5074,6 +5233,8 @@ async fn app_info(app: AppHandle) -> serde_json::Value {
         "first": b.settings.last_version.is_empty(),
         "update_repo": b.settings.update_repo,
         "power_mode": b.settings.power_mode,
+        "auto_update": b.settings.auto_update,
+        "keep_running": b.settings.keep_running,
         "power_saver": power_saver(&b),
         "on_battery": b.on_battery,
     })
@@ -5101,7 +5262,7 @@ async fn set_update_repo(app: AppHandle, repo: String) -> Result<(), String> {
 // ---------------------------------------------------------------- mises à jour automatiques
 // Les versions sont publiées sur github.com/Xera-Dev/Corrtex (fichier latest.json signé) :
 // Corrtex vérifie peu après le démarrage puis toutes les 6 heures, et installe en un clic.
-const UPDATE_FIRST: Duration = Duration::from_secs(20);
+const UPDATE_FIRST: Duration = Duration::from_secs(4);
 const UPDATE_EVERY: Duration = Duration::from_secs(6 * 3600);
 
 async fn find_update(app: &AppHandle) -> Result<Option<tauri_plugin_updater::Update>, String> {
@@ -5127,13 +5288,22 @@ fn set_update_available(app: &AppHandle, version: Option<String>) {
 fn update_watch(app: AppHandle) {
     std::thread::spawn(move || {
         std::thread::sleep(UPDATE_FIRST);
+        let mut first = true;
         loop {
             let a = app.clone();
+            let launch = first;
             tauri::async_runtime::block_on(async move {
                 if let Ok(up) = find_update(&a).await {
+                    let found = up.is_some();
                     set_update_available(&a, up.map(|u| u.version));
+                    // au lancement, avec « Mises à jour automatiques » : installée tout de suite
+                    let auto = state(&a).settings.auto_update;
+                    if found && launch && auto {
+                        let _ = install_update(&a).await;
+                    }
                 }
             });
+            first = false;
             std::thread::sleep(UPDATE_EVERY);
         }
     });
@@ -5162,6 +5332,11 @@ async fn update_status(app: AppHandle) -> Option<String> {
 /// Télécharge et installe la nouvelle version, puis redémarre Corrtex (session enregistrée avant).
 #[tauri::command]
 async fn update_install(app: AppHandle) -> Result<(), String> {
+    install_update(&app).await
+}
+
+async fn install_update(app: &AppHandle) -> Result<(), String> {
+    let app = app.clone();
     {
         let mut b = state(&app);
         if b.updating {
@@ -5743,6 +5918,45 @@ fn toggle_fullscreen_win(app: &AppHandle, win: &str) {
     broadcast(app);
 }
 
+/// Plein écran demandé par la page (bouton plein écran d'une vidéo) : toute la fenêtre passe
+/// en plein écran et l'onglet occupe tout l'écran ; à la sortie (Échap), tout revient comme avant.
+fn set_page_fullscreen(app: &AppHandle, win: &str, on: bool) {
+    let Some(window) = app.get_window(win) else { return };
+    let set_window = {
+        let mut b = state(app);
+        let Some(w) = b.windows.get_mut(win) else { return };
+        if w.page_fs == on {
+            return;
+        }
+        w.page_fs = on;
+        if on {
+            // déjà en plein écran (F11) : on n'y touchera pas à la sortie
+            w.page_fs_window = !w.fullscreen;
+            w.page_fs_window
+        } else {
+            let was = w.page_fs_window;
+            w.page_fs_window = false;
+            was && !w.fullscreen
+        }
+    };
+    close_suggest(app, win);
+    if on {
+        close_popups(app, win);
+        dismiss_panel(app, win);
+    }
+    if set_window {
+        let _ = window.set_fullscreen(on);
+    }
+    layout(app, win);
+    // la fenêtre change de taille un peu après : nouveau placement une fois le plein écran établi
+    let (app2, win2) = (app.clone(), win.to_string());
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(250));
+        layout(&app2, &win2);
+    });
+    broadcast(app);
+}
+
 #[tauri::command]
 async fn toggle_fullscreen(app: AppHandle, webview: Webview) {
     toggle_fullscreen_win(&app, &caller_win(&webview));
@@ -6102,6 +6316,16 @@ async fn tab_event(app: AppHandle, webview: Webview, kind: String, data: serde_j
             };
             let _ = ai_send(&app, &win, prompt);
         }
+        "page_fullscreen" => {
+            // seulement l'onglet affiché
+            let on = data.as_bool().unwrap_or(false);
+            if let Some(win) = win_of_tab(&app, id) {
+                let active = state(&app).windows.get(&win).and_then(|w| w.active) == Some(id);
+                if active || !on {
+                    set_page_fullscreen(&app, &win, on);
+                }
+            }
+        }
         "shopping_action" => {
             // boutons du panneau de recherche d'achat (dans la page) : transmis au moteur caché
             let Some(win) = win_of_tab(&app, id) else { return };
@@ -6334,6 +6558,8 @@ fn with_mac_menu(b: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
 
 fn main() {
     with_mac_menu(tauri::Builder::default())
+        // une seule instance : relancer Corrtex ramène la fenêtre déjà ouverte (réduite)
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| reopen_existing(app, args)))
         .manage(AppState(Mutex::new(Browser {
             google: Google { status: "unknown".into(), ..Default::default() },
             ..Default::default()
@@ -6404,6 +6630,8 @@ fn main() {
             version_seen,
             set_update_repo,
             update_check,
+            app_quit,
+            set_app_prefs,
             shopping_job,
             shopping_save,
             shopping_start,

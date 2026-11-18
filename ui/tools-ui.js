@@ -11,6 +11,7 @@
     trash: '<svg viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg>',
     cookie: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="9" cy="10" r="1"/><circle cx="14.5" cy="8.5" r=".8"/><circle cx="15" cy="14" r="1.1"/><circle cx="10" cy="15.5" r=".8"/></svg>',
     shot: '<svg viewBox="0 0 24 24"><path d="M4.5 8.5V6a1.5 1.5 0 0 1 1.5-1.5h2.5M15.5 4.5H18A1.5 1.5 0 0 1 19.5 6v2.5M19.5 15.5V18a1.5 1.5 0 0 1-1.5 1.5h-2.5M8.5 19.5H6A1.5 1.5 0 0 1 4.5 18v-2.5"/><circle cx="12" cy="12" r="3"/></svg>',
+    quit: '<svg viewBox="0 0 24 24"><path d="M12 3.5v8"/><path d="M7 6.5a7.5 7.5 0 1 0 10 0"/></svg>',
     cart: '<svg viewBox="0 0 24 24"><path d="M4 5h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h7.6a1.5 1.5 0 0 0 1.5-1.2L20 8.5H7"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>',
     book: '<svg viewBox="0 0 24 24"><path d="M12 6.5c-1.8-1.3-4.3-2-7.5-2v13c3.2 0 5.7.7 7.5 2 1.8-1.3 4.3-2 7.5-2v-13c-3.2 0-5.7.7-7.5 2z"/><path d="M12 6.5v13"/></svg>',
     focus: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>',
@@ -96,7 +97,15 @@
     sleepAll.style.marginTop = '12px';
     g3.append(cards, list, sleepAll);
 
-    root.append(g1, g2, g3);
+    // quitter vraiment (fermer la fenêtre la garde réduite dans la barre des tâches, selon le réglage)
+    const g4 = el('div', 'group');
+    const l4 = el('div', 'list');
+    const quit = row(ICON.quit, 'Quitter Corrtex', '');
+    quit.onclick = () => C.invoke('app_quit');
+    l4.append(quit);
+    g4.append(l4);
+
+    root.append(g1, g2, g3, g4);
 
     async function refresh() {
       const p = await C.invoke('perf_stats').catch(() => null);

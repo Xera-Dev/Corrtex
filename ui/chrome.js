@@ -711,6 +711,8 @@
     C.listen('update-progress', (d) => {
       const p = d || {};
       if (p.error) { pill.classList.remove('busy'); label.textContent = 'Réessayer'; pill.title = 'La mise à jour a échoué : ' + p.error; return; }
+      pill.hidden = false;
+      pill.classList.add('busy');
       label.textContent = p.pct >= 100 ? 'Installation…' : 'Téléchargement ' + p.pct + ' %';
     });
     pill.addEventListener('click', () => {

@@ -69,6 +69,8 @@ fn main() {
             "version_seen",
             "set_update_repo",
             "update_check",
+            "app_quit",
+            "set_app_prefs",
             "shopping_job",
             "shopping_save",
             "shopping_start",

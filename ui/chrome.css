@@ -216,3 +216,19 @@ html.mac body.focus #toolbar { padding-left: 84px; padding-right: 10px; }
 .update-pill svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .update-pill[hidden] { display: none; }
 .update-pill.busy { pointer-events: none; opacity: .85; }
+
+/* ------------------------------------------------ écran de chargement (lancement de Corrtex) */
+#boot { display: none; }
+html.boot #boot { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px;
+  background: radial-gradient(60% 50% at 50% 42%, color-mix(in srgb, var(--l1, #ff4f7b) 16%, transparent), transparent 70%), linear-gradient(180deg, var(--page-1, #2f2f32), var(--page-2, #1e1e21));
+  transition: opacity .22s ease; -webkit-app-region: drag; }
+html.boot #boot.out { opacity: 0; }
+html.boot body > :not(#boot) { visibility: hidden; }
+#boot .b-logo { position: relative; font: 700 64px/1 'Poppins', sans-serif; letter-spacing: -1px; color: var(--fg);
+  text-shadow: 0 2px 22px color-mix(in srgb, var(--fg) 22%, transparent); animation: b-in .5s cubic-bezier(.2,.8,.2,1); }
+#boot .b-logo svg { position: absolute; right: -19px; top: -17px; width: 39px; height: 27px; fill: none; stroke: var(--fg); stroke-width: 4.5;
+  stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--fg) 60%, transparent)); }
+#boot .b-bar { width: 120px; height: 3px; border-radius: 2px; background: var(--hover, rgba(255,255,255,.12)); overflow: hidden; }
+#boot .b-bar i { display: block; width: 40%; height: 100%; border-radius: 2px; background: var(--fg); opacity: .8; animation: b-run 1s ease-in-out infinite; }
+@keyframes b-run { from { transform: translateX(-110%); } to { transform: translateX(260%); } }
+@keyframes b-in { from { opacity: 0; transform: translateY(6px) scale(.98); } }

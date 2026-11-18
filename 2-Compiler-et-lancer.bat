@@ -22,7 +22,20 @@ if errorlevel 1 (
   exit /b 1
 )
 
+rem Corrtex ouvert : il est ferme proprement (session enregistree) pour pouvoir etre remplace
+tasklist /fi "imagename eq Corrtex.exe" | find /i "Corrtex.exe" >nul && (
+  echo  Fermeture de Corrtex pour installer la nouvelle version...
+  taskkill /im Corrtex.exe >nul 2>nul
+  timeout /t 3 >nul
+  taskkill /im Corrtex.exe /f >nul 2>nul
+  timeout /t 1 >nul
+)
 copy /y "target\release\corrtex.exe" "%~dp0Corrtex.exe" >nul
+if errorlevel 1 (
+  echo  [ERREUR] Impossible de remplacer Corrtex.exe : fermez Corrtex puis relancez ce fichier.
+  pause
+  exit /b 1
+)
 echo.
 echo  OK ! Corrtex.exe est pret dans le dossier du projet. Lancement...
 start "" "%~dp0Corrtex.exe"
