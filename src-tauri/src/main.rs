@@ -335,8 +335,14 @@ struct Browser {
     on_battery: bool,
     /// mise à jour de l'interface déjà programmée (regroupement des envois)
     bcast_pending: bool,
-    /// recherche d'achat de l'agent, par fenêtre : demande, précisions et résultats (panneau)
+    /// recherche d'achat de l'agent, par fenêtre : demande, précisions et résultats (moteur caché)
     shopping: HashMap<String, serde_json::Value>,
+    /// dernier état affiché par le panneau de recherche d'achat, par fenêtre
+    shopping_view: HashMap<String, serde_json::Value>,
+    /// panneau de recherche d'achat ouvert : onglet où il est dessiné, par fenêtre
+    shopping_open: HashMap<String, u32>,
+    /// historique des recherches de l'agent (achats et réponses), le plus récent en dernier
+    agent_history: Vec<serde_json::Value>,
     /// nouvelle version de Corrtex disponible (numéro), installation en cours
     update_version: Option<String>,
     updating: bool,
@@ -777,6 +783,10 @@ fn layout_with(app: &AppHandle, win: &str, width: f64, height: f64) {
     if let Some(q) = app.get_webview(&format!("aiq-{win}")) {
         set_bounds(&q, LogicalPosition::new(width + 200.0, 0.0), LogicalSize::new(420.0, 820.0));
     }
+    // moteur de la recherche d'achat : hors de la fenêtre lui aussi
+    if let Some(q) = app.get_webview(&format!("shopw-{win}")) {
+        set_bounds(&q, LogicalPosition::new(width + 900.0, 0.0), LogicalSize::new(400.0, 700.0));
+    }
 
     let side_x = (width - side_w()).max(0.0);
     if let Some(wv) = app.get_webview(&format!("aires-{win}")) {
@@ -1133,6 +1143,13 @@ fn spawn_tab_view(app: &AppHandle, id: u32) -> Result<(), String> {
                 if finished {
                     let _ = wv.eval(&page_theme_js(&app_load));
                     let _ = wv.eval(&keys_js(&app_load));
+                    // panneau de recherche d'achat ouvert dans cette fenêtre : il reste affiché sur la nouvelle page
+                    if let Some(win) = win_of_tab(&app_load, id) {
+                        let shown = state(&app_load).shopping_open.get(&win) == Some(&id);
+                        if shown {
+                            shopping_show_in(&app_load, &win, id);
+                        }
+                    }
                     // son coupé : la nouvelle page reste muette
                     if state(&app_load).tabs.get(&id).map(|t| t.muted).unwrap_or(false) {
                         let _ = wv.eval("window.__corrtexMute && window.__corrtexMute(true)");
@@ -1362,6 +1379,7 @@ fn activate_with(app: &AppHandle, id: u32, focus: bool) {
             let _ = wv.set_focus();
         }
     }
+    shopping_follow(app, &win);
     broadcast(app);
 }
 
@@ -1768,6 +1786,15 @@ fn overlay_builder(label: String, page: &str) -> WebviewBuilder<tauri::Wry> {
 async fn toggle_ext_panel(app: AppHandle, webview: Webview, view: Option<String>) -> Result<bool, String> {
     // un seul panneau à la fois, par-dessus la page : « extensions » ou « tools » (Outils)
     let win = caller_win(&webview);
+    // recherche d'achat : panneau en verre dans la page (comme le comparateur)
+    if view.as_deref() == Some("shopping") {
+        close_panel_window(&app, &win);
+        if let Some(w) = state(&app).windows.get_mut(&win) {
+            w.panel_view.clear();
+        }
+        shopping_toggle(&app, &win);
+        return Ok(false);
+    }
     // comparateur : carte affichée dans la page elle-même (verre sur la page)
     if view.as_deref() == Some("shop") {
         if let Some(wv) = active_webview(&app, &win) {
@@ -3890,29 +3917,70 @@ fn is_shopping_goal(goal: &str) -> bool {
     words.iter().any(|w| g.contains(w)) && !page_task.iter().any(|w| g.contains(w))
 }
 
-/// Ouvre le panneau de recherche d'achat et lui confie la demande (nouvelle recherche).
+/// Moteur caché de la recherche d'achat (une vue par fenêtre, hors de l'écran) : il continue
+/// pendant qu'on change d'onglet ; le panneau est dessiné dans la page de l'onglet affiché.
+fn ensure_shop_worker(app: &AppHandle, win: &str) -> Result<(), String> {
+    let label = format!("shopw-{win}");
+    if let Some(w) = app.get_webview(&label) {
+        let _ = w.eval("window.__corrtexShoppingReload && window.__corrtexShoppingReload()");
+        return Ok(());
+    }
+    let window = app.get_window(win).ok_or("fenêtre introuvable")?;
+    let (w, _) = window_logical_size(app, win);
+    window
+        .add_child(
+            web(label, WebviewUrl::App("shopping.html".into())).focused(false),
+            LogicalPosition::new(w + 900.0, 0.0),
+            LogicalSize::new(400.0, 700.0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Ouvre le panneau de recherche d'achat et lance une nouvelle recherche.
 fn open_shopping(app: &AppHandle, win: &str, goal: &str) -> Result<(), String> {
     state(app).shopping.insert(win.to_string(), serde_json::json!({ "goal": goal, "fresh": true }));
-    // panneau déjà ouvert sur la recherche : il repart sur la nouvelle demande
-    let current = state(app).windows.get(win).map(|w| w.panel_view.clone()).unwrap_or_default();
-    if current == "shopping" {
-        if let Some(p) = app.get_webview(&format!("panel-{win}")) {
-            let _ = p.eval("window.__corrtexShoppingReload && window.__corrtexShoppingReload()");
-            return Ok(());
+    let placeholder = serde_json::json!({ "goal": goal, "busy": true, "steps": [{ "t": "Préparation de la recherche…", "s": "run" }], "rounds": [], "tags": [], "suggestions": [] });
+    state(app).shopping_view.insert(win.to_string(), placeholder);
+    ensure_shop_worker(app, win)?;
+    shopping_show(app, win);
+    Ok(())
+}
+
+/// Affiche le panneau dans l'onglet actif de la fenêtre (et le retire de l'onglet précédent).
+fn shopping_show(app: &AppHandle, win: &str) {
+    let Some(id) = state(app).windows.get(win).and_then(|w| w.active) else { return };
+    let prev = state(app).shopping_open.insert(win.to_string(), id);
+    if let Some(p) = prev.filter(|p| *p != id) {
+        if let Some(wv) = app.get_webview(&tab_label(p)) {
+            let _ = wv.eval("window.__corrtexShopping && window.__corrtexShopping.hide()");
         }
     }
-    let (w, h) = window_logical_size(app, win);
-    let (sidebar, ch) = {
-        let b = state(app);
-        (b.windows.get(win).map(|w| w.sidebar_open).unwrap_or(false), chrome_height(&b, win))
-    };
-    let (pos, size) = panel_rect_for("shopping", w, h, sidebar, ch);
-    open_panel_window(app, win, "shopping.html", pos, size)?;
-    if let Some(wn) = state(app).windows.get_mut(win) {
-        wn.panel_view = "shopping".into();
+    shopping_show_in(app, win, id);
+}
+
+fn shopping_show_in(app: &AppHandle, win: &str, id: u32) {
+    let view = state(app).shopping_view.get(win).cloned().unwrap_or(serde_json::Value::Null);
+    if let Some(wv) = app.get_webview(&tab_label(id)) {
+        let js = format!("window.__corrtexShopping && window.__corrtexShopping.show({})", serde_json::to_string(&view).unwrap_or_else(|_| "null".into()));
+        let _ = wv.eval(&js);
     }
-    let _ = app.emit_to(format!("chrome-{win}").as_str(), "ext-panel", serde_json::json!({ "win": win, "open": true, "view": "shopping" }));
-    Ok(())
+}
+
+/// Changement d'onglet : le panneau ouvert suit l'onglet affiché.
+fn shopping_follow(app: &AppHandle, win: &str) {
+    let open = state(app).shopping_open.contains_key(win);
+    if open {
+        shopping_show(app, win);
+    }
+}
+
+fn shopping_hide(app: &AppHandle, win: &str) {
+    if let Some(id) = state(app).shopping_open.remove(win) {
+        if let Some(wv) = app.get_webview(&tab_label(id)) {
+            let _ = wv.eval("window.__corrtexShopping && window.__corrtexShopping.hide()");
+        }
+    }
 }
 
 /// Recherche d'achat de la fenêtre (demande, précisions, résultats déjà trouvés).
@@ -3922,18 +3990,36 @@ async fn shopping_job(app: AppHandle, webview: Webview) -> serde_json::Value {
     state(&app).shopping.get(&win).cloned().unwrap_or(serde_json::Value::Null)
 }
 
-/// Le panneau enregistre l'état de sa recherche (pour le retrouver s'il est refermé puis rouvert).
+/// Le moteur enregistre sa recherche ; sa version courte va dans l'historique de l'agent.
 #[tauri::command]
-async fn shopping_save(app: AppHandle, webview: Webview, data: serde_json::Value) -> Result<(), String> {
+async fn shopping_save(app: AppHandle, webview: Webview, mut data: serde_json::Value) -> Result<(), String> {
     let win = caller_win(&webview);
     if data.to_string().len() > 1_500_000 {
         return Err("recherche trop volumineuse".into());
     }
+    let record = data.as_object_mut().and_then(|o| o.remove("record"));
     state(&app).shopping.insert(win, data);
+    if let Some(r) = record {
+        agent_history_put(&app, r);
+    }
     Ok(())
 }
 
-/// Lance une recherche d'achat depuis une autre page (palette, accueil).
+/// Nouvel état de la recherche (étapes, résultats) : le panneau ouvert le redessine.
+#[tauri::command]
+async fn shopping_push(app: AppHandle, webview: Webview, view: serde_json::Value) {
+    let win = caller_win(&webview);
+    let shown = {
+        let mut b = state(&app);
+        b.shopping_view.insert(win.clone(), view);
+        b.shopping_open.get(&win).copied()
+    };
+    if let Some(id) = shown {
+        shopping_show_in(&app, &win, id);
+    }
+}
+
+/// Lance une recherche d'achat depuis une autre page (palette, accueil, bibliothèque).
 #[tauri::command]
 async fn shopping_start(app: AppHandle, webview: Webview, goal: String) -> Result<(), String> {
     let win = caller_win(&webview);
@@ -3942,6 +4028,125 @@ async fn shopping_start(app: AppHandle, webview: Webview, goal: String) -> Resul
         return Err("demande vide".into());
     }
     open_shopping(&app, &win, &goal)
+}
+
+/// Bouton « Recherche d'achat » (Outils) : ouvre ou ferme le panneau sur la dernière recherche
+/// (ou sur l'historique s'il n'y en a pas encore).
+fn shopping_toggle(app: &AppHandle, win: &str) {
+    if state(app).shopping_open.contains_key(win) {
+        shopping_hide(app, win);
+        return;
+    }
+    let has_job = state(app).shopping.contains_key(win);
+    if has_job && app.get_webview(&format!("shopw-{win}")).is_none() {
+        let _ = ensure_shop_worker(app, win);
+    }
+    if !state(app).shopping_view.contains_key(win) {
+        state(app).shopping_view.insert(win.to_string(), serde_json::json!({ "history": true }));
+    }
+    shopping_show(app, win);
+}
+
+// ---------------------------------------------------------------- historique de l'agent
+fn agent_history_path(app: &AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_data_dir().ok().map(|d| d.join("agent_history.json"))
+}
+
+fn load_agent_history(app: &AppHandle) {
+    let list: Vec<serde_json::Value> = agent_history_path(app)
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    state(app).agent_history = list;
+}
+
+fn save_agent_history(app: &AppHandle) {
+    let list = state(app).agent_history.clone();
+    let Some(p) = agent_history_path(app) else { return };
+    std::thread::spawn(move || {
+        if let Some(dir) = p.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Ok(json) = serde_json::to_string(&list) {
+            let _ = std::fs::write(p, json);
+        }
+    });
+}
+
+/// Ajoute (ou met à jour, même numéro) une recherche dans l'historique ; 60 au plus.
+fn agent_history_put(app: &AppHandle, mut rec: serde_json::Value) {
+    let id = rec.get("id").and_then(|v| v.as_u64()).unwrap_or_else(|| now_secs() * 1000);
+    rec["id"] = serde_json::json!(id);
+    if rec.get("time").and_then(|v| v.as_u64()).is_none() {
+        rec["time"] = serde_json::json!(now_secs());
+    }
+    {
+        let mut b = state(app);
+        b.agent_history.retain(|r| r.get("id").and_then(|v| v.as_u64()) != Some(id));
+        b.agent_history.push(rec);
+        let n = b.agent_history.len();
+        if n > 60 {
+            b.agent_history.drain(0..n - 60);
+        }
+    }
+    save_agent_history(app);
+}
+
+/// Liste de l'historique (sans les données complètes), la plus récente d'abord.
+fn agent_history_brief(app: &AppHandle) -> Vec<serde_json::Value> {
+    state(app)
+        .agent_history
+        .iter()
+        .rev()
+        .map(|r| {
+            let mut o = serde_json::Map::new();
+            for k in ["id", "kind", "goal", "time", "answer", "url"] {
+                if let Some(v) = r.get(k) {
+                    o.insert(k.into(), v.clone());
+                }
+            }
+            serde_json::Value::Object(o)
+        })
+        .collect()
+}
+
+#[tauri::command]
+async fn agent_history_list(app: AppHandle) -> Vec<serde_json::Value> {
+    agent_history_brief(&app)
+}
+
+#[tauri::command]
+async fn agent_history_delete(app: AppHandle, id: Option<u64>) {
+    {
+        let mut b = state(&app);
+        match id {
+            Some(id) => b.agent_history.retain(|r| r.get("id").and_then(|v| v.as_u64()) != Some(id)),
+            None => b.agent_history.clear(),
+        }
+    }
+    save_agent_history(&app);
+}
+
+/// Rouvre une recherche de l'historique : achat → panneau avec ses résultats ; agent → sa page.
+fn agent_history_open_in(app: &AppHandle, win: &str, id: u64) -> Result<(), String> {
+    let rec = state(app).agent_history.iter().find(|r| r.get("id").and_then(|v| v.as_u64()) == Some(id)).cloned().ok_or("recherche introuvable")?;
+    if rec.get("kind").and_then(|v| v.as_str()) == Some("shopping") {
+        let data = rec.get("data").cloned().ok_or("résultats introuvables")?;
+        state(app).shopping.insert(win.to_string(), data);
+        ensure_shop_worker(app, win)?;
+        shopping_show(app, win);
+        return Ok(());
+    }
+    if let Some(url) = rec.get("url").and_then(|v| v.as_str()).filter(|u| u.starts_with("http")) {
+        create_tab(app, win, Some(url.to_string()))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn agent_history_open(app: AppHandle, webview: Webview, id: u64) -> Result<(), String> {
+    let win = caller_win(&webview);
+    agent_history_open_in(&app, &win, id)
 }
 
 /// Messages de l'agent venant de la page.
@@ -5897,6 +6102,55 @@ async fn tab_event(app: AppHandle, webview: Webview, kind: String, data: serde_j
             };
             let _ = ai_send(&app, &win, prompt);
         }
+        "shopping_action" => {
+            // boutons du panneau de recherche d'achat (dans la page) : transmis au moteur caché
+            let Some(win) = win_of_tab(&app, id) else { return };
+            let action = data.get("action").and_then(|v| v.as_str()).unwrap_or("");
+            match action {
+                "close" => shopping_hide(&app, &win),
+                "new" => {
+                    let goal: String = data.get("goal").and_then(|v| v.as_str()).unwrap_or("").trim().chars().take(500).collect();
+                    if !goal.is_empty() {
+                        let _ = open_shopping(&app, &win, &goal);
+                    }
+                }
+                "history" => {
+                    let list = agent_history_brief(&app);
+                    let js = format!("window.__corrtexShopping && window.__corrtexShopping.history({})", serde_json::to_string(&list).unwrap_or_else(|_| "[]".into()));
+                    let _ = webview.eval(&js);
+                }
+                "open" => {
+                    if let Some(hid) = data.get("id").and_then(|v| v.as_u64()) {
+                        let _ = agent_history_open_in(&app, &win, hid);
+                    }
+                }
+                "delete" => {
+                    if let Some(hid) = data.get("id").and_then(|v| v.as_u64()) {
+                        {
+                            let mut b = state(&app);
+                            b.agent_history.retain(|r| r.get("id").and_then(|v| v.as_u64()) != Some(hid));
+                        }
+                        save_agent_history(&app);
+                    }
+                }
+                _ => {
+                    if let Some(w) = app.get_webview(&format!("shopw-{win}")) {
+                        let js = format!("window.__corrtexShoppingAction && window.__corrtexShoppingAction({})", serde_json::to_string(&data).unwrap_or_else(|_| "null".into()));
+                        let _ = w.eval(&js);
+                    }
+                }
+            }
+        }
+        "agent_done" => {
+            // réponse finale de l'agent de navigation : gardée dans l'historique de l'agent
+            let goal = state(&app).agents.get(&id).map(|j| j.goal.clone()).unwrap_or_default();
+            let answer: String = data.get("answer").and_then(|v| v.as_str()).unwrap_or("").chars().take(4000).collect();
+            let private = win_of_tab(&app, id).and_then(|w| state(&app).windows.get(&w).map(|w| w.private)).unwrap_or(false);
+            if !goal.is_empty() && !private {
+                let url = state(&app).tabs.get(&id).map(|t| t.url.clone()).unwrap_or_default();
+                agent_history_put(&app, serde_json::json!({ "id": now_secs() * 1000, "kind": "agent", "goal": goal, "answer": answer, "url": url, "time": now_secs() }));
+            }
+        }
         "agent_snap" | "agent_step" | "agent_answer" | "agent_retry" | "agent_stop" => {
             agent_event(&app, id, kind.as_str(), &data);
         }
@@ -6153,6 +6407,10 @@ fn main() {
             shopping_job,
             shopping_save,
             shopping_start,
+            shopping_push,
+            agent_history_list,
+            agent_history_delete,
+            agent_history_open,
             update_status,
             update_install,
             keys_get,
@@ -6205,6 +6463,7 @@ fn main() {
         .setup(|app| {
             let handle = app.handle().clone();
             update_watch(handle.clone());
+            load_agent_history(&handle);
             let settings = load_settings(&handle);
             SIDE_W.store(settings.sidebar_w.clamp(SIDE_MIN, 1000.0) as u32, std::sync::atomic::Ordering::Relaxed);
             state(&handle).settings = settings;

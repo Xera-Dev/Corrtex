@@ -13,7 +13,7 @@
     "suggest-*",
     "aires-*",
     "popup-*",
-    "preview-*"
+    "preview-*", "shopw-*"
   ],
   "local": true,
   "permissions": [
@@ -71,6 +71,10 @@
     "allow-shopping-job",
     "allow-shopping-save",
     "allow-shopping-start",
+    "allow-shopping-push",
+    "allow-agent-history-list",
+    "allow-agent-history-delete",
+    "allow-agent-history-open",
     "allow-update-status",
     "allow-update-install",
     "allow-keys-get",

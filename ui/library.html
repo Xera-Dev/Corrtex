@@ -59,6 +59,21 @@
   .fileic { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--hover); flex: none; }
   .ring { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--hover); border-top-color: var(--l1, #ff4f7b); animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .ah { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+  .ai { padding: 14px 16px; border-radius: 16px; background: var(--glass); border: 1px solid var(--glass-border); }
+  .ai .h1 { display: flex; align-items: center; gap: 10px; }
+  .ai .h1 svg { width: 17px; height: 17px; opacity: .75; flex: none; }
+  .ai .g { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; }
+  .ai .d { font-size: 12px; color: var(--fg-dim); white-space: nowrap; }
+  .ai .k { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9px; background: var(--hover); color: var(--fg-dim); white-space: nowrap; }
+  .ai .a { margin-top: 8px; font-size: 13px; line-height: 1.5; color: var(--fg-dim); white-space: pre-line; max-height: 4.5em; overflow: hidden; user-select: text; }
+  .ai.open .a { max-height: none; color: var(--fg); }
+  .ai .btns { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
+  .ai .btns .chip { height: 32px; padding: 0 13px; font-size: 12.5px; }
+  .ai .btns .chip.sel { background: var(--fg); color: var(--page-2); border-color: var(--fg); }
+  .ai .x { margin-left: auto; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; }
+  .ai .x:hover { background: var(--hover); }
+  .ai .x svg { width: 15px; height: 15px; }
   .empty { padding: 50px 10px 30px; text-align: center; color: var(--fg-dim); }
   .empty svg { width: 38px; height: 38px; opacity: .5; margin-bottom: 10px; }
   [hidden] { display: none !important; }
@@ -79,6 +94,7 @@
           <button id="tab-history" class="on">Historique</button>
           <button id="tab-downloads">Téléchargements</button>
           <button id="tab-readlater">À lire</button>
+          <button id="tab-agent">Agent IA</button>
         </div>
       </header>
 
@@ -102,6 +118,17 @@
           <span style="font-size: 12.5px; color: var(--fg-dim)">Clic droit sur un onglet › « Lire plus tard »</span>
         </div>
         <div id="rl"></div>
+      </section>
+
+      <section id="agent" class="card" hidden>
+        <div class="tools">
+          <label class="search">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+            <input id="aq" placeholder="Rechercher dans les demandes et les réponses de l’agent" autocomplete="off" spellcheck="false">
+          </label>
+          <button id="clear-agent" class="chip danger">Tout effacer</button>
+        </div>
+        <div id="ag"></div>
       </section>
 
       <section id="downloads" class="card" hidden>
@@ -128,17 +155,18 @@
 
       // ---------------------------------------------------------------- onglets de la page
       function show(s) {
-        section = ['downloads', 'readlater'].includes(s) ? s : 'history';
-        for (const k of ['history', 'downloads', 'readlater']) { $(k).hidden = section !== k; $('tab-' + k).classList.toggle('on', section === k); }
-        const t = { history: 'Historique', downloads: 'Téléchargements', readlater: 'À lire' }[section];
+        section = ['downloads', 'readlater', 'agent'].includes(s) ? s : 'history';
+        for (const k of ['history', 'downloads', 'readlater', 'agent']) { $(k).hidden = section !== k; $('tab-' + k).classList.toggle('on', section === k); }
+        const t = { history: 'Historique', downloads: 'Téléchargements', readlater: 'À lire', agent: 'Agent IA' }[section];
         $('title').textContent = t;
         document.title = t;
         if (location.hash !== '#' + section) history.replaceState(null, '', '#' + section);
-        if (section === 'history') loadHistory(); else if (section === 'readlater') loadReadLater(); else loadDownloads();
+        if (section === 'history') loadHistory(); else if (section === 'readlater') loadReadLater(); else if (section === 'agent') loadAgent(); else loadDownloads();
       }
       $('tab-history').onclick = () => show('history');
       $('tab-downloads').onclick = () => show('downloads');
       $('tab-readlater').onclick = () => show('readlater');
+      $('tab-agent').onclick = () => show('agent');
 
       // ---------------------------------------------------------------- liste de lecture
       async function loadReadLater() {
@@ -174,6 +202,64 @@
         box.append(l);
       }
       C.listen('read-later', () => { if (section === 'readlater') loadReadLater(); });
+
+      // ---------------------------------------------------------------- agent IA : demandes et réponses
+      const AGI = {
+        cart: '<svg viewBox="0 0 24 24"><path d="M4 5h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h7.6a1.5 1.5 0 0 0 1.5-1.2L20 8.5H7"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>',
+        bot: '<svg viewBox="0 0 24 24"><path d="M12 3v3M7.5 8h9a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2zM9.5 13h.01M14.5 13h.01"/></svg>'
+      };
+      let agentList = [];
+      async function loadAgent() {
+        agentList = await C.invoke('agent_history_list').catch(() => []);
+        renderAgent();
+      }
+      function renderAgent() {
+        const box = $('ag');
+        box.replaceChildren();
+        const q = C.norm ? C.norm($('aq').value) : $('aq').value.trim().toLowerCase();
+        const n = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const list = agentList.filter((h) => !q || n(h.goal + ' ' + h.answer).indexOf(n(q)) >= 0);
+        if (!list.length) {
+          box.innerHTML = '<div class="empty">' + AGI.bot + '<div>' + (agentList.length ? 'Aucune recherche ne correspond.' : 'Aucune recherche pour l’instant.<br>Les demandes faites à l’agent du panneau IA (achats, actions sur une page) et ses réponses s’afficheront ici.') + '</div></div>';
+          return;
+        }
+        const wrap = document.createElement('div');
+        wrap.className = 'ah';
+        for (const h of list) {
+          const it = document.createElement('div');
+          it.className = 'ai';
+          const h1 = document.createElement('div');
+          h1.className = 'h1';
+          h1.innerHTML = h.kind === 'shopping' ? AGI.cart : AGI.bot;
+          const g = document.createElement('span'); g.className = 'g'; g.textContent = h.goal || '';
+          const k = document.createElement('span'); k.className = 'k'; k.textContent = h.kind === 'shopping' ? 'Achat' : 'Agent';
+          const d = document.createElement('span'); d.className = 'd';
+          d.textContent = new Date((h.time || 0) * 1000).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+          h1.append(g, k, d);
+          it.append(h1);
+          if (h.answer) { const a = document.createElement('div'); a.className = 'a'; a.textContent = h.answer; it.append(a); }
+          it.onclick = () => it.classList.toggle('open');
+          const btns = document.createElement('div');
+          btns.className = 'btns';
+          if (h.kind === 'shopping') {
+            const o = document.createElement('button'); o.className = 'chip sel'; o.textContent = 'Rouvrir les résultats';
+            o.onclick = (e) => { e.stopPropagation(); C.invoke('agent_history_open', { id: h.id }); };
+            btns.append(o);
+          } else if (h.url) {
+            const o = document.createElement('button'); o.className = 'chip'; o.textContent = 'Ouvrir la page';
+            o.onclick = (e) => { e.stopPropagation(); C.invoke('agent_history_open', { id: h.id }); };
+            btns.append(o);
+          }
+          const x = document.createElement('button'); x.className = 'x'; x.title = 'Retirer'; x.innerHTML = ICON.x;
+          x.onclick = async (e) => { e.stopPropagation(); await C.invoke('agent_history_delete', { id: h.id }); loadAgent(); };
+          btns.append(x);
+          it.append(btns);
+          wrap.append(it);
+        }
+        box.append(wrap);
+      }
+      $('aq').addEventListener('input', renderAgent);
+      $('clear-agent').onclick = async () => { await C.invoke('agent_history_delete', { id: null }); loadAgent(); };
       C.listen('library-section', (s) => show(s));
 
       // ---------------------------------------------------------------- historique

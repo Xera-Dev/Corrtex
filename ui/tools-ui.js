@@ -50,7 +50,7 @@
     ];
     for (const n of nav) { const b = row(n[0], n[1], n[2]); b.onclick = after(n[3]); l1.append(b); }
     // dernière recherche d'achat de l'agent (le panneau remplace celui-ci : pas de fermeture après)
-    const shopRow = row(ICON.cart, 'Recherche d’achat (derniers résultats)', '');
+    const shopRow = row(ICON.cart, 'Recherche d’achat et historique de l’agent', '');
     shopRow.onclick = () => {
       const inPanel = /^panw-/.test((((window.__TAURI_INTERNALS__ || {}).metadata || {}).currentWindow || {}).label || '');
       if (!inPanel) close();

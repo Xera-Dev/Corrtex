@@ -3,124 +3,18 @@
 <head>
 <meta charset="utf-8">
 <title>Recherche d'achat</title>
-<link rel="stylesheet" href="theme.css">
-<link rel="stylesheet" href="newtab.css">
 <script src="common.js"></script>
 <script src="shop-parse.js"></script>
-<style>
-  /* même tiroir que les panneaux Extensions et Outils, plus large pour les fiches */
-  html, body { background: transparent !important; overflow: hidden; }
-  .drawer { width: 512px; padding-bottom: 0; display: flex; flex-direction: column; overflow: hidden;
-    background: color-mix(in srgb, var(--card-solid) 96%, transparent); backdrop-filter: none; -webkit-backdrop-filter: none; }
-  .drawer header { flex: none; }
-  .drawer header h2 { display: flex; align-items: center; gap: 9px; }
-  .drawer header h2 svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; opacity: .85; }
-  #scroll { flex: 1; overflow-y: auto; margin: 0 -22px; padding: 0 22px 18px; }
-  #scroll::-webkit-scrollbar { width: 0; }
-
-  .goal { margin: 2px 0 14px; padding: 12px 14px; border-radius: 16px; background: var(--glass); border: 1px solid var(--glass-border); }
-  .goal .q { font-size: 14px; font-weight: 600; line-height: 1.35; }
-  .goal .sum { font-size: 12.5px; color: var(--fg-dim); margin-top: 4px; line-height: 1.35; }
-  .goal .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .goal .tags span { font-size: 11.5px; padding: 3px 9px; border-radius: 10px; background: var(--hover); color: var(--fg-dim); }
-
-  /* étapes de la recherche */
-  .steps { display: flex; flex-direction: column; gap: 7px; margin: 4px 0 14px; }
-  .step { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--fg-dim); }
-  .step i { width: 14px; height: 14px; flex: none; border-radius: 50%; border: 2px solid var(--glass-border); }
-  .step.run i { border-color: var(--fg-dim); border-top-color: transparent; animation: spin .8s linear infinite; }
-  .step.ok i { border: 0; background: #4cd38a; -webkit-mask: var(--chk) center/12px no-repeat; mask: var(--chk) center/12px no-repeat; }
-  .step.ok { color: var(--fg); }
-  .step.err i { border: 0; background: #ff7a7a; border-radius: 50%; }
-  :root { --chk: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .round-title { font-size: 13px; font-weight: 600; color: var(--fg-dim); margin: 18px 0 8px; letter-spacing: .2px; }
-  .advice { font-size: 13px; line-height: 1.45; padding: 11px 13px; border-radius: 14px; margin: 6px 0 10px;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--l1, #ff4f7b) 14%, transparent), color-mix(in srgb, var(--l2, #8a5cff) 12%, transparent));
-    border: 1px solid var(--glass-border); }
-  .advice b { font-weight: 650; }
-
-  /* fiche d'un article */
-  .card { display: grid; grid-template-columns: 92px 1fr; gap: 13px; padding: 13px; border-radius: 18px; margin-bottom: 10px;
-    background: var(--glass); border: 1px solid var(--glass-border); position: relative; }
-  .card.top { border-color: color-mix(in srgb, var(--fg) 30%, var(--glass-border)); }
-  .card .rank { position: absolute; top: 9px; left: 9px; width: 22px; height: 22px; border-radius: 11px; font-size: 11.5px; font-weight: 700;
-    display: grid; place-items: center; background: var(--fg); color: var(--page-2); z-index: 1; }
-  .card .pic { width: 92px; height: 92px; border-radius: 13px; background: #fff; display: grid; place-items: center; overflow: hidden; cursor: pointer; }
-  .card .pic img { max-width: 84px; max-height: 84px; object-fit: contain; }
-  .card .body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-  .card .name { font-size: 13.5px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
-  .card .name:hover { text-decoration: underline; }
-  .card .meta { font-size: 11.5px; color: var(--fg-dim); display: flex; flex-wrap: wrap; gap: 4px 10px; }
-  .card .meta .stars { color: #ffc24b; }
-  .card .priceline { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
-  .card .price { font-size: 19px; font-weight: 700; letter-spacing: -.2px; }
-  .card .shop { font-size: 12px; color: var(--fg-dim); }
-  .card .trend { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
-  .badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 9px; white-space: nowrap; }
-  .badge.good { background: rgba(76,211,138,.16); color: #4cd38a; }
-  .badge.bad { background: rgba(255,159,67,.16); color: #ffae5e; }
-  .badge.mid { background: var(--hover); color: var(--fg-dim); }
-  .spark { width: 110px; height: 26px; flex: none; }
-  .spark path { fill: none; stroke: var(--fg-dim); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
-  .spark circle { fill: var(--fg); }
-  .card .why { font-size: 12.5px; line-height: 1.4; color: var(--fg); opacity: .9; margin-top: 3px; }
-  .card .acts { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
-  .card .acts button { height: 28px; padding: 0 12px; border-radius: 14px; font-size: 12px; border: 1px solid var(--glass-border); background: var(--glass); }
-  .card .acts button:hover { background: var(--hover); }
-  .card .acts button.main { background: var(--fg); color: var(--page-2); border-color: var(--fg); font-weight: 600; }
-
-  .empty { font-size: 13px; color: var(--fg-dim); padding: 14px 2px; line-height: 1.45; }
-  .err { color: #ff7a7a; }
-
-  /* actions du bas */
-  footer { flex: none; margin: 0 -22px; padding: 12px 22px 18px; border-top: 1px solid var(--hover); display: flex; flex-direction: column; gap: 10px; }
-  footer .btns { display: flex; gap: 8px; }
-  footer .btns .chip { flex: 1; height: 38px; font-weight: 600; }
-  footer .btns .chip:disabled { opacity: .45; pointer-events: none; }
-  #refine[hidden] { display: none; }
-  #refine .sug { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-  #refine .sug button { height: 28px; padding: 0 11px; border-radius: 14px; font-size: 12px; background: var(--glass); border: 1px solid var(--glass-border); color: var(--fg-dim); }
-  #refine .sug button:hover { color: var(--fg); background: var(--hover); }
-  #refine .sug button.on { color: var(--page-2); background: var(--fg); border-color: var(--fg); }
-</style>
 </head>
 <body>
-  <section class="drawer" id="drawer">
-    <header>
-      <h2><svg viewBox="0 0 24 24"><path d="M4 5h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h7.6a1.5 1.5 0 0 0 1.5-1.2L20 8.5H7"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>Recherche d'achat</h2>
-      <button id="close" class="round-btn small" title="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </header>
-    <div id="scroll">
-      <div class="goal" id="goal"></div>
-      <div class="steps" id="steps"></div>
-      <div id="results"></div>
-    </div>
-    <footer>
-      <div id="refine" hidden>
-        <div class="sug" id="sug"></div>
-        <div class="inline-form">
-          <input id="refine-input" type="text" maxlength="200" placeholder="Ex. : plutôt sans fil, autonomie de 30 h, moins de 120 €">
-          <button class="chip sel" id="refine-go">Relancer</button>
-        </div>
-      </div>
-      <div class="btns">
-        <button class="chip" id="more" disabled>Continuer la recherche</button>
-        <button class="chip sel" id="precise" disabled>Préciser la recherche</button>
-      </div>
-    </footer>
-  </section>
+  <!-- Moteur de la recherche d'achat de l'agent (vue cachée, une par fenêtre).
+       L'affichage se fait dans la page de l'onglet (panneau en verre, tab_script.js) :
+       chaque changement est envoyé à Corrtex (shopping_push), les boutons reviennent ici
+       (window.__corrtexShoppingAction). La recherche continue quand on change d'onglet. -->
   <script>
   (function () {
     const C = window.Corrtex, S = window.CorrtexShop;
-    const $ = (id) => document.getElementById(id);
-    const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
     const eur = (n) => n == null ? '' : n.toLocaleString('fr-FR', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }) + ' €';
-    const close = () => C.invoke('close_panel');
-    $('close').onclick = close;
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('refine').hidden) close(); });
-    const open = (url) => { if (url) C.invoke('new_tab', { url }); };
     const fetchPage = (url) => window.__TAURI__.core.invoke('shop_fetch', { url });
 
     // ------------------------------------------------------------ IA (page d'IA cachée, sans clé d'API)
@@ -153,22 +47,62 @@
     }
 
     // ------------------------------------------------------------ état de la recherche
-    let job = null, busy = false;
-    const save = () => C.invoke('shopping_save', { data: job }).catch(() => {});
+    let job = null, busy = false, steps = [];
+    const blank = (goal) => ({ hid: Date.now(), goal, time: Math.floor(Date.now() / 1000), refinements: [], queriesDone: [], cands: {}, rounds: [], suggestions: [], next: [], plan: null });
     function brief() {
       let s = '« ' + job.goal + ' »';
       if (job.refinements.length) s += '\nPrécisions données ensuite par l’utilisateur :\n' + job.refinements.map((r) => '- ' + r).join('\n');
       return s;
     }
 
+    // ce que le panneau de la page affiche
+    function view() {
+      const P = job.plan || {};
+      const tags = job.refinements.slice();
+      if (P.budget_max) tags.push('Budget ≤ ' + eur(P.budget_max));
+      (P.must || []).slice(0, 4).forEach((m) => tags.push(m));
+      return {
+        hid: job.hid, goal: job.goal, summary: P.summary || '', tags, busy, steps,
+        suggestions: job.suggestions || [],
+        rounds: job.rounds.map((r) => ({ title: r.title, advice: r.advice || '', empty: !!r.empty, items: r.picks.map((p) => item(p)).filter(Boolean) })),
+      };
+    }
+    function item(p) {
+      const c = job.cands[p.id];
+      if (!c) return null;
+      const best = c.offers && c.offers[0];
+      return { id: c.id, name: c.name, image: c.image || '', url: c.url, price: best ? best.price : c.low != null ? c.low : c.price,
+        shop: best ? best.shop : '', stock: best ? !!best.stock : false, offer: best ? best.url : '', rating: c.rating || null, reviews: c.reviews || 0,
+        offers: c.offerCount || 0, trend: c.trend || null, why: p.why || '', timing: p.timing || 'ok' };
+    }
+    let pushT = 0;
+    function publish(now) {
+      clearTimeout(pushT);
+      const go = () => C.invoke('shopping_push', { view: view() }).catch(() => {});
+      if (now) go(); else pushT = setTimeout(go, 120);
+    }
+    // enregistrement : la recherche complète (pour continuer) et une version courte pour l'historique
+    function save() {
+      const keep = {};
+      job.rounds.forEach((r) => r.picks.forEach((p) => { if (job.cands[p.id]) keep[p.id] = job.cands[p.id]; }));
+      const lines = [];
+      job.rounds.forEach((r) => r.picks.forEach((p) => {
+        const it = item(p);
+        if (it && lines.length < 5) lines.push((lines.length + 1) + '. ' + it.name + (it.price != null ? ' — ' + eur(it.price) : '') + (it.shop ? ' chez ' + it.shop : ''));
+      }));
+      const record = { id: job.hid, kind: 'shopping', goal: job.goal, time: job.time, answer: lines.join('\n') || (job.rounds[0] && job.rounds[0].advice) || 'Aucun article trouvé',
+        data: Object.assign({}, job, { cands: keep, fresh: false }) };
+      C.invoke('shopping_save', { data: Object.assign({}, job, { fresh: false, record }) }).catch(() => {});
+    }
+
     // étapes affichées pendant la recherche
     function step(text) {
-      const s = el('div', 'step run');
-      s.append(el('i'), el('span', '', text));
-      $('steps').appendChild(s);
+      const s = { t: text, s: 'run' };
+      steps.push(s);
+      publish();
       return {
-        ok(t) { s.className = 'step ok'; if (t) s.lastChild.textContent = t; },
-        fail(t) { s.className = 'step err'; if (t) s.lastChild.textContent = t; },
+        ok(t) { s.s = 'ok'; if (t) s.t = t; publish(); },
+        fail(t) { s.s = 'err'; if (t) s.t = t; publish(); },
       };
     }
 
@@ -199,7 +133,6 @@
 
     // 2. recherches sur le comparateur
     async function search(queries) {
-      const fresh = [];
       for (const q of queries) {
         const st = step('Recherche « ' + q + ' » sur leDénicheur…');
         try {
@@ -209,14 +142,12 @@
             if (job.cands[c.id]) return;
             c.q = q;
             job.cands[c.id] = c;
-            fresh.push(c);
             n++;
           });
           st.ok('« ' + q + ' » : ' + list.length + ' produit' + (list.length > 1 ? 's' : '') + (n < list.length ? ' (' + n + ' nouveaux)' : ''));
         } catch (e) { st.fail('« ' + q + ' » : ' + e); }
         job.queriesDone.push(q);
       }
-      return fresh;
     }
 
     // accessoires (pas les mots « pour », « compatible »… trop courants dans les noms de produits)
@@ -254,7 +185,6 @@
       const now = low != null ? low : pts[pts.length - 1];
       pts[pts.length - 1] = now;
       const min = Math.min(...pts), max = Math.max(...pts), avg = pts.reduce((a, b) => a + b, 0) / pts.length;
-      // courbe réduite (40 points au plus) pour la petite courbe
       const stepN = Math.max(1, Math.ceil(pts.length / 40));
       const series = pts.filter((x, i) => i % stepN === 0 || i === pts.length - 1).map((x) => Math.round(x * 100) / 100);
       return { min, max, avg: Math.round(avg * 100) / 100, cur: now, days: pts.length - 1, vsAvg: Math.round((now - avg) / avg * 100), atLow: now <= min * 1.02 && max > min * 1.03, series };
@@ -273,7 +203,6 @@
         c.enriched = true;
         st.ok('Suivi des prix : ' + (++done) + ' / ' + list.length);
       };
-      // trois pages à la fois
       const queue = list.slice();
       await Promise.all([0, 1, 2].map(async () => { while (queue.length) await one(queue.shift()); }));
       st.ok('Prix suivis sur ' + list.length + ' article' + (list.length > 1 ? 's' : ''));
@@ -301,7 +230,6 @@
       let r = null;
       try { r = json(await ask(prompt)); } catch (e) {}
       if (!r || !Array.isArray(r.picks)) {
-        // sans l'IA : les mieux notés au prix le plus intéressant
         const sorted = list.slice().sort((a, b) => prescore(b) + (b.trend && b.trend.atLow ? 0.3 : 0) - prescore(a) - (a.trend && a.trend.atLow ? 0.3 : 0));
         r = { picks: sorted.slice(0, 5).map((c) => ({ n: list.indexOf(c), why: '', timing: c.trend && c.trend.atLow ? 'buy' : 'ok' })), advice: '', refine: [], next: [] };
         st.fail('IA indisponible : classement par notes et prix');
@@ -319,16 +247,14 @@
 
     // une recherche complète : « new » (première ou précisée) ou « more » (continuer)
     async function run(mode) {
-      if (busy) return;
+      if (busy || !job) return;
       busy = true;
-      buttons();
-      $('steps').innerHTML = '';
-      if (mode === 'new') { job.rounds = []; $('results').innerHTML = ''; }
-      renderGoal();
+      steps = [];
+      if (mode === 'new') job.rounds = [];
+      publish(true);
       try {
         let queries = mode === 'more' && job.next && job.next.length ? job.next.filter((q) => job.queriesDone.indexOf(q) < 0) : [];
         if (!queries.length) queries = await plan(mode === 'more');
-        renderGoal();
         await search(queries);
         // tous les articles connus (les précisions réutilisent ceux déjà trouvés), hors déjà proposés si on continue
         const skip = mode === 'more' ? shownIds() : [];
@@ -336,7 +262,8 @@
         pool.sort((a, b) => b[0] - a[0]);
         pool = pool.slice(0, 10).map((x) => x[1]);
         if (!pool.length) {
-          job.rounds.push({ title: mode === 'more' ? 'Rien de nouveau' : 'Aucun article', picks: [], advice: mode === 'more' ? 'Pas d’autre article pertinent trouvé. Essayez de préciser la recherche.' : 'Aucun article ne correspond. Précisez la recherche (autre formulation, budget, marque…).', empty: true });
+          job.rounds.push({ title: mode === 'more' ? 'Rien de nouveau' : 'Aucun article', picks: [], empty: true,
+            advice: mode === 'more' ? 'Pas d’autre article pertinent trouvé. Essayez de préciser la recherche.' : 'Aucun article ne correspond. Précisez la recherche (autre formulation, budget, marque…).' });
         } else {
           const need = pool.filter((c) => !c.enriched);
           if (need.length) await enrich(need);
@@ -349,166 +276,40 @@
         step('Erreur : ' + e).fail();
       }
       busy = false;
-      job.fresh = false;
+      publish(true);
       save();
-      renderResults();
-      buttons();
-      const last = $('results').lastElementChild;
-      if (mode === 'more' && last) last.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    // ------------------------------------------------------------ affichage
-    function renderGoal() {
-      const g = $('goal');
-      g.innerHTML = '';
-      g.appendChild(el('div', 'q', job.goal));
-      if (job.plan && job.plan.summary) g.appendChild(el('div', 'sum', job.plan.summary));
-      const tags = el('div', 'tags');
-      job.refinements.forEach((r) => tags.appendChild(el('span', '', r)));
-      if (job.plan) {
-        if (job.plan.budget_max) tags.appendChild(el('span', '', 'Budget ≤ ' + eur(job.plan.budget_max)));
-        (job.plan.must || []).slice(0, 4).forEach((m) => tags.appendChild(el('span', '', m)));
-      }
-      if (tags.children.length) g.appendChild(tags);
-    }
-
-    function spark(series) {
-      const W = 110, H = 26, min = Math.min(...series), max = Math.max(...series), span = max - min || 1;
-      const pts = series.map((p, i) => [i / (series.length - 1) * (W - 4) + 2, H - 3 - (p - min) / span * (H - 6)]);
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-      svg.setAttribute('class', 'spark');
-      const path = document.createElementNS(svg.namespaceURI, 'path');
-      path.setAttribute('d', 'M' + pts.map((p) => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L'));
-      const dot = document.createElementNS(svg.namespaceURI, 'circle');
-      const lp = pts[pts.length - 1];
-      dot.setAttribute('cx', lp[0]); dot.setAttribute('cy', lp[1]); dot.setAttribute('r', 2.6);
-      svg.append(path, dot);
-      return svg;
-    }
-
-    function card(p, i, first) {
-      const c = job.cands[p.id];
-      if (!c) return null;
-      const k = el('div', 'card' + (first && i === 0 ? ' top' : ''));
-      if (first) k.appendChild(el('div', 'rank', String(i + 1)));
-      const best = c.offers && c.offers[0];
-      const pic = el('div', 'pic');
-      if (c.image) { const im = new Image(); im.src = c.image; im.alt = ''; im.loading = 'lazy'; im.onerror = () => im.remove(); pic.appendChild(im); }
-      pic.onclick = () => open(c.url);
-      const b = el('div', 'body');
-      const name = el('div', 'name', c.name);
-      name.title = 'Comparer les prix sur leDénicheur';
-      name.onclick = () => open(c.url);
-      b.appendChild(name);
-      const meta = el('div', 'meta');
-      if (c.rating) { const s = el('span'); s.append(el('span', 'stars', '★ ' + c.rating.toLocaleString('fr-FR', { maximumFractionDigits: 1 })), document.createTextNode(' (' + (c.reviews || 0).toLocaleString('fr-FR') + ' avis)')); meta.appendChild(s); }
-      if (c.offerCount) meta.appendChild(el('span', '', c.offerCount + ' marchand' + (c.offerCount > 1 ? 's' : '')));
-      if (meta.children.length) b.appendChild(meta);
-      const pl = el('div', 'priceline');
-      const price = best ? best.price : c.low != null ? c.low : c.price;
-      pl.appendChild(el('span', 'price', price != null ? eur(price) : 'Prix indisponible'));
-      if (best) pl.appendChild(el('span', 'shop', 'chez ' + best.shop + (best.stock ? ' · en stock' : '')));
-      b.appendChild(pl);
-      const t = c.trend;
-      const tr = el('div', 'trend');
-      const timing = { buy: ['good', 'Bon moment pour acheter'], wait: ['bad', 'Mieux vaut attendre'], ok: ['mid', 'Prix habituel'] }[p.timing] || null;
-      if (t) {
-        const txt = t.atLow ? 'Au plus bas sur ' + Math.max(t.days, 1) + ' j' : (t.vsAvg > 0 ? '+' : '') + t.vsAvg + ' % / moyenne ' + eur(t.avg);
-        const cls = t.atLow || t.vsAvg <= -5 ? 'good' : t.vsAvg >= 5 ? 'bad' : 'mid';
-        const bd = el('span', 'badge ' + cls, txt);
-        bd.title = 'Sur ' + t.days + ' jours : de ' + eur(t.min) + ' à ' + eur(t.max) + ' (moyenne ' + eur(t.avg) + ')';
-        tr.appendChild(bd);
-        if (t.series.length > 2) tr.appendChild(spark(t.series));
-      } else if (timing) tr.appendChild(el('span', 'badge ' + timing[0], timing[1]));
-      if (tr.children.length) b.appendChild(tr);
-      if (p.why) b.appendChild(el('div', 'why', p.why));
-      const acts = el('div', 'acts');
-      if (best) { const o = el('button', 'main', 'Voir l’offre'); o.onclick = () => open(best.url); acts.appendChild(o); }
-      const cmp = el('button', best ? '' : 'main', 'Comparer les prix');
-      cmp.onclick = () => open(c.url);
-      acts.appendChild(cmp);
-      if (t && timing && p.timing !== 'ok') { const tb = el('span', 'badge ' + timing[0], timing[1]); tb.style.alignSelf = 'center'; acts.appendChild(tb); }
-      b.appendChild(acts);
-      k.append(pic, b);
-      return k;
-    }
-
-    function renderResults() {
-      const box = $('results');
-      box.innerHTML = '';
-      job.rounds.forEach((r, ri) => {
-        box.appendChild(el('div', 'round-title', r.title));
-        if (r.advice) { const a = el('div', 'advice'); a.appendChild(el('b', '', 'Conseil : ')); a.appendChild(document.createTextNode(r.advice)); box.appendChild(a); }
-        if (!r.picks.length && r.empty) return;
-        r.picks.forEach((p, i) => { const k = card(p, i, ri === 0); if (k) box.appendChild(k); });
-      });
-      renderSuggestions();
-    }
-
-    function renderSuggestions() {
-      const sug = $('sug');
-      sug.innerHTML = '';
-      (job.suggestions || []).forEach((s) => {
-        const b = el('button', '', s);
-        b.onclick = () => { b.classList.toggle('on'); };
-        sug.appendChild(b);
-      });
-    }
-
-    function buttons() {
-      $('more').disabled = busy || !job;
-      $('precise').disabled = busy || !job;
-      $('more').textContent = busy ? 'Recherche en cours…' : 'Continuer la recherche';
-    }
-
-    // ------------------------------------------------------------ boutons du bas
-    $('more').onclick = () => { $('refine').hidden = true; run('more'); };
-    $('precise').onclick = () => {
-      const r = $('refine');
-      r.hidden = !r.hidden;
-      $('precise').textContent = r.hidden ? 'Préciser la recherche' : 'Annuler';
-      if (!r.hidden) setTimeout(() => $('refine-input').focus(), 30);
+    // ------------------------------------------------------------ boutons du panneau de la page
+    window.__corrtexShoppingAction = (a) => {
+      if (!a || !job) return;
+      if (a.action === 'more') run('more');
+      else if (a.action === 'refine') {
+        const all = (a.texts || []).map((t) => String(t).trim().slice(0, 200)).filter(Boolean);
+        if (!all.length) return;
+        job.refinements = job.refinements.concat(all).slice(-8);
+        job.next = [];
+        run('new');
+      } else if (a.action === 'show') publish(true);
     };
-    function refine() {
-      const picked = Array.from($('sug').querySelectorAll('button.on')).map((b) => b.textContent);
-      const typed = $('refine-input').value.trim();
-      const all = picked.concat(typed ? [typed] : []);
-      if (!all.length) { $('refine-input').focus(); return; }
-      job.refinements = job.refinements.concat(all).slice(-8);
-      $('refine-input').value = '';
-      $('refine').hidden = true;
-      $('precise').textContent = 'Préciser la recherche';
-      job.next = [];
-      run('new');
-    }
-    $('refine-go').onclick = refine;
-    $('refine-input').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') refine();
-      if (e.key === 'Escape') { $('refine').hidden = true; $('precise').textContent = 'Préciser la recherche'; }
-    });
 
-    // ------------------------------------------------------------ démarrage
+    // ------------------------------------------------------------ démarrage (et nouvelle demande)
     async function load() {
       const j = await C.invoke('shopping_job').catch(() => null);
-      if (!j || !j.goal) {
-        $('goal').textContent = 'Demandez à l’agent du panneau IA de vous trouver un article (ex. « un aspirateur sans fil à moins de 200 € »).';
-        return;
-      }
-      job = Object.assign({ refinements: [], queriesDone: [], cands: {}, rounds: [], suggestions: [], next: [], plan: null }, j);
-      renderGoal();
+      if (!j || !j.goal) return;
+      steps = [];
       if (j.fresh) {
-        job = { goal: j.goal, fresh: true, refinements: [], queriesDone: [], cands: {}, rounds: [], suggestions: [], next: [], plan: null };
+        job = blank(j.goal);
         run('new');
       } else {
-        renderResults();
-        buttons();
+        job = Object.assign(blank(j.goal), j);
+        delete job.record;
+        publish(true);
       }
     }
     window.__corrtexShoppingReload = () => { if (!busy) load(); else setTimeout(window.__corrtexShoppingReload, 1500); };
     load();
   })();
   </script>
-  <script>requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById('drawer').classList.add('open')));</script>
 </body>
 </html>
