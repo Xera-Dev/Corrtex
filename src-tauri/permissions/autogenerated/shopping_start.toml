@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-shopping-start"
+description = "Enables the shopping_start command without any pre-configured scope."
+commands.allow = ["shopping_start"]
+
+[[permission]]
+identifier = "deny-shopping-start"
+description = "Denies the shopping_start command without any pre-configured scope."
+commands.deny = ["shopping_start"]

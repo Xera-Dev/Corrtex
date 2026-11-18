@@ -335,6 +335,8 @@ struct Browser {
     on_battery: bool,
     /// mise à jour de l'interface déjà programmée (regroupement des envois)
     bcast_pending: bool,
+    /// recherche d'achat de l'agent, par fenêtre : demande, précisions et résultats (panneau)
+    shopping: HashMap<String, serde_json::Value>,
     /// nouvelle version de Corrtex disponible (numéro), installation en cours
     update_version: Option<String>,
     updating: bool,
@@ -1745,6 +1747,11 @@ fn panel_rect_for(view: &str, width: f64, height: f64, sidebar: bool, top: f64) 
         let y = top + 8.0;
         return (LogicalPosition::new((width - side - w - 8.0).max(0.0), y), LogicalSize::new(w, (height - y - 8.0).max(200.0)));
     }
+    // recherche d'achat : même tiroir, plus large pour les fiches des articles
+    if view == "shopping" {
+        let w = 540.0_f64.min(width - side);
+        return (LogicalPosition::new((width - side - w).max(0.0), top), LogicalSize::new(w, (height - top).max(200.0)));
+    }
     // Extensions / Outils : zone transparente à droite de la page ; le panneau y est dessiné
     // exactement comme sur la page d'accueil (marges de 14 px, coins arrondis, ombre)
     let w = (PANEL_W + 54.0).min(width - side);
@@ -1770,6 +1777,7 @@ async fn toggle_ext_panel(app: AppHandle, webview: Webview, view: Option<String>
     }
     let view = match view.as_deref() {
         Some("tools") => "tools",
+        Some("shopping") => "shopping",
         _ => "extensions",
     };
     let label = format!("panel-{win}");
@@ -1799,6 +1807,7 @@ async fn toggle_ext_panel(app: AppHandle, webview: Webview, view: Option<String>
     let page = match view {
         "tools" => "tools.html",
         "shop" => "shop.html",
+        "shopping" => "shopping.html",
         _ => "panel.html",
     };
     let _ = window;
@@ -2445,8 +2454,9 @@ fn dismiss_panel(app: &AppHandle, win: &str) {
         let b = state(app);
         b.windows.get(win).map(|w| w.panel_view.clone()).unwrap_or_default()
     };
-    // le comparateur est dans la page : rien à fermer ici
-    if view.is_empty() || app.get_window(&format!("panw-{win}")).is_none() {
+    // le comparateur est dans la page : rien à fermer ici ; la recherche d'achat reste ouverte
+    // pendant qu'on consulte les articles (elle se ferme par sa croix)
+    if view.is_empty() || view == "shopping" || app.get_window(&format!("panw-{win}")).is_none() {
         return;
     }
     if let Some(w) = state(app).windows.get_mut(win) {
@@ -3838,11 +3848,16 @@ async fn agent_open(app: AppHandle, webview: Webview) -> Result<(), String> {
 
 /// Lance l'agent dans l'onglet actif.
 #[tauri::command]
-async fn agent_start(app: AppHandle, webview: Webview, goal: String) -> Result<(), String> {
+async fn agent_start(app: AppHandle, webview: Webview, goal: String) -> Result<String, String> {
     let win = caller_win(&webview);
     let goal: String = goal.trim().chars().take(500).collect();
     if goal.is_empty() {
         return Err("objectif vide".into());
+    }
+    // recherche d'achat : comparateur de prix et suivi des prix plutôt que des clics sur une page
+    if is_shopping_goal(&goal) {
+        open_shopping(&app, &win, &goal)?;
+        return Ok("shopping".into());
     }
     let id = state(&app).windows.get(&win).and_then(|w| w.active).ok_or("aucun onglet")?;
     // sur l'accueil, l'agent commence par une recherche Google
@@ -3856,7 +3871,77 @@ async fn agent_start(app: AppHandle, webview: Webview, goal: String) -> Result<(
     } else {
         let _ = wv.eval(&agent_resume_js(&job));
     }
+    Ok("agent".into())
+}
+
+// ---------------------------------------------------------------- recherche d'achat de l'agent
+/// La demande est-elle une recherche d'article à acheter ? (« trouve-moi un casque à moins de 100 € »)
+fn is_shopping_goal(goal: &str) -> bool {
+    let g = goal.to_lowercase();
+    let words = [
+        "acheter", "achat", "achète", "achèterais", "commander", "meilleur prix", "moins cher", "pas cher", "bon plan", "bons plans",
+        "promo", "réduction", "budget", "rapport qualité", "qualité/prix", "qualité prix", "comparer les prix", "comparateur",
+        "quel modèle", "quelle marque", "lequel choisir", "laquelle choisir", "je cherche un", "je cherche une", "trouve-moi un",
+        "trouve moi un", "trouve-moi une", "trouve moi une", "conseille-moi un", "conseille moi un", "conseille-moi une", "recommande-moi",
+        "meilleur rapport", "à moins de", "a moins de", "€", "euros", "le meilleur ", "la meilleure ", "les meilleurs ", "les meilleures ",
+    ];
+    // ce qui ressemble à une action sur la page en cours n'est pas un achat
+    let page_task = ["cette page", "sur la page", "ce site", "de ces ", "parmi ces", "sa fiche", "remplis", "connecte", "inscris", "réserve", "billet", "train", "avion", "hôtel", "restaurant"];
+    words.iter().any(|w| g.contains(w)) && !page_task.iter().any(|w| g.contains(w))
+}
+
+/// Ouvre le panneau de recherche d'achat et lui confie la demande (nouvelle recherche).
+fn open_shopping(app: &AppHandle, win: &str, goal: &str) -> Result<(), String> {
+    state(app).shopping.insert(win.to_string(), serde_json::json!({ "goal": goal, "fresh": true }));
+    // panneau déjà ouvert sur la recherche : il repart sur la nouvelle demande
+    let current = state(app).windows.get(win).map(|w| w.panel_view.clone()).unwrap_or_default();
+    if current == "shopping" {
+        if let Some(p) = app.get_webview(&format!("panel-{win}")) {
+            let _ = p.eval("window.__corrtexShoppingReload && window.__corrtexShoppingReload()");
+            return Ok(());
+        }
+    }
+    let (w, h) = window_logical_size(app, win);
+    let (sidebar, ch) = {
+        let b = state(app);
+        (b.windows.get(win).map(|w| w.sidebar_open).unwrap_or(false), chrome_height(&b, win))
+    };
+    let (pos, size) = panel_rect_for("shopping", w, h, sidebar, ch);
+    open_panel_window(app, win, "shopping.html", pos, size)?;
+    if let Some(wn) = state(app).windows.get_mut(win) {
+        wn.panel_view = "shopping".into();
+    }
+    let _ = app.emit_to(format!("chrome-{win}").as_str(), "ext-panel", serde_json::json!({ "win": win, "open": true, "view": "shopping" }));
     Ok(())
+}
+
+/// Recherche d'achat de la fenêtre (demande, précisions, résultats déjà trouvés).
+#[tauri::command]
+async fn shopping_job(app: AppHandle, webview: Webview) -> serde_json::Value {
+    let win = caller_win(&webview);
+    state(&app).shopping.get(&win).cloned().unwrap_or(serde_json::Value::Null)
+}
+
+/// Le panneau enregistre l'état de sa recherche (pour le retrouver s'il est refermé puis rouvert).
+#[tauri::command]
+async fn shopping_save(app: AppHandle, webview: Webview, data: serde_json::Value) -> Result<(), String> {
+    let win = caller_win(&webview);
+    if data.to_string().len() > 1_500_000 {
+        return Err("recherche trop volumineuse".into());
+    }
+    state(&app).shopping.insert(win, data);
+    Ok(())
+}
+
+/// Lance une recherche d'achat depuis une autre page (palette, accueil).
+#[tauri::command]
+async fn shopping_start(app: AppHandle, webview: Webview, goal: String) -> Result<(), String> {
+    let win = caller_win(&webview);
+    let goal: String = goal.trim().chars().take(500).collect();
+    if goal.is_empty() {
+        return Err("demande vide".into());
+    }
+    open_shopping(&app, &win, &goal)
 }
 
 /// Messages de l'agent venant de la page.
@@ -6065,6 +6150,9 @@ fn main() {
             version_seen,
             set_update_repo,
             update_check,
+            shopping_job,
+            shopping_save,
+            shopping_start,
             update_status,
             update_install,
             keys_get,

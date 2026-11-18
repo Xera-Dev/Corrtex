@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Recherche d'achat</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="newtab.css">
+<script src="common.js"></script>
+<script src="shop-parse.js"></script>
+<style>
+  /* même tiroir que les panneaux Extensions et Outils, plus large pour les fiches */
+  html, body { background: transparent !important; overflow: hidden; }
+  .drawer { width: 512px; padding-bottom: 0; display: flex; flex-direction: column; overflow: hidden;
+    background: color-mix(in srgb, var(--card-solid) 96%, transparent); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .drawer header { flex: none; }
+  .drawer header h2 { display: flex; align-items: center; gap: 9px; }
+  .drawer header h2 svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; opacity: .85; }
+  #scroll { flex: 1; overflow-y: auto; margin: 0 -22px; padding: 0 22px 18px; }
+  #scroll::-webkit-scrollbar { width: 0; }
+
+  .goal { margin: 2px 0 14px; padding: 12px 14px; border-radius: 16px; background: var(--glass); border: 1px solid var(--glass-border); }
+  .goal .q { font-size: 14px; font-weight: 600; line-height: 1.35; }
+  .goal .sum { font-size: 12.5px; color: var(--fg-dim); margin-top: 4px; line-height: 1.35; }
+  .goal .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .goal .tags span { font-size: 11.5px; padding: 3px 9px; border-radius: 10px; background: var(--hover); color: var(--fg-dim); }
+
+  /* étapes de la recherche */
+  .steps { display: flex; flex-direction: column; gap: 7px; margin: 4px 0 14px; }
+  .step { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--fg-dim); }
+  .step i { width: 14px; height: 14px; flex: none; border-radius: 50%; border: 2px solid var(--glass-border); }
+  .step.run i { border-color: var(--fg-dim); border-top-color: transparent; animation: spin .8s linear infinite; }
+  .step.ok i { border: 0; background: #4cd38a; -webkit-mask: var(--chk) center/12px no-repeat; mask: var(--chk) center/12px no-repeat; }
+  .step.ok { color: var(--fg); }
+  .step.err i { border: 0; background: #ff7a7a; border-radius: 50%; }
+  :root { --chk: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .round-title { font-size: 13px; font-weight: 600; color: var(--fg-dim); margin: 18px 0 8px; letter-spacing: .2px; }
+  .advice { font-size: 13px; line-height: 1.45; padding: 11px 13px; border-radius: 14px; margin: 6px 0 10px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--l1, #ff4f7b) 14%, transparent), color-mix(in srgb, var(--l2, #8a5cff) 12%, transparent));
+    border: 1px solid var(--glass-border); }
+  .advice b { font-weight: 650; }
+
+  /* fiche d'un article */
+  .card { display: grid; grid-template-columns: 92px 1fr; gap: 13px; padding: 13px; border-radius: 18px; margin-bottom: 10px;
+    background: var(--glass); border: 1px solid var(--glass-border); position: relative; }
+  .card.top { border-color: color-mix(in srgb, var(--fg) 30%, var(--glass-border)); }
+  .card .rank { position: absolute; top: 9px; left: 9px; width: 22px; height: 22px; border-radius: 11px; font-size: 11.5px; font-weight: 700;
+    display: grid; place-items: center; background: var(--fg); color: var(--page-2); z-index: 1; }
+  .card .pic { width: 92px; height: 92px; border-radius: 13px; background: #fff; display: grid; place-items: center; overflow: hidden; cursor: pointer; }
+  .card .pic img { max-width: 84px; max-height: 84px; object-fit: contain; }
+  .card .body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .card .name { font-size: 13.5px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+  .card .name:hover { text-decoration: underline; }
+  .card .meta { font-size: 11.5px; color: var(--fg-dim); display: flex; flex-wrap: wrap; gap: 4px 10px; }
+  .card .meta .stars { color: #ffc24b; }
+  .card .priceline { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+  .card .price { font-size: 19px; font-weight: 700; letter-spacing: -.2px; }
+  .card .shop { font-size: 12px; color: var(--fg-dim); }
+  .card .trend { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+  .badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 9px; white-space: nowrap; }
+  .badge.good { background: rgba(76,211,138,.16); color: #4cd38a; }
+  .badge.bad { background: rgba(255,159,67,.16); color: #ffae5e; }
+  .badge.mid { background: var(--hover); color: var(--fg-dim); }
+  .spark { width: 110px; height: 26px; flex: none; }
+  .spark path { fill: none; stroke: var(--fg-dim); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+  .spark circle { fill: var(--fg); }
+  .card .why { font-size: 12.5px; line-height: 1.4; color: var(--fg); opacity: .9; margin-top: 3px; }
+  .card .acts { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .card .acts button { height: 28px; padding: 0 12px; border-radius: 14px; font-size: 12px; border: 1px solid var(--glass-border); background: var(--glass); }
+  .card .acts button:hover { background: var(--hover); }
+  .card .acts button.main { background: var(--fg); color: var(--page-2); border-color: var(--fg); font-weight: 600; }
+
+  .empty { font-size: 13px; color: var(--fg-dim); padding: 14px 2px; line-height: 1.45; }
+  .err { color: #ff7a7a; }
+
+  /* actions du bas */
+  footer { flex: none; margin: 0 -22px; padding: 12px 22px 18px; border-top: 1px solid var(--hover); display: flex; flex-direction: column; gap: 10px; }
+  footer .btns { display: flex; gap: 8px; }
+  footer .btns .chip { flex: 1; height: 38px; font-weight: 600; }
+  footer .btns .chip:disabled { opacity: .45; pointer-events: none; }
+  #refine[hidden] { display: none; }
+  #refine .sug { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  #refine .sug button { height: 28px; padding: 0 11px; border-radius: 14px; font-size: 12px; background: var(--glass); border: 1px solid var(--glass-border); color: var(--fg-dim); }
+  #refine .sug button:hover { color: var(--fg); background: var(--hover); }
+  #refine .sug button.on { color: var(--page-2); background: var(--fg); border-color: var(--fg); }
+</style>
+</head>
+<body>
+  <section class="drawer" id="drawer">
+    <header>
+      <h2><svg viewBox="0 0 24 24"><path d="M4 5h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h7.6a1.5 1.5 0 0 0 1.5-1.2L20 8.5H7"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>Recherche d'achat</h2>
+      <button id="close" class="round-btn small" title="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div id="scroll">
+      <div class="goal" id="goal"></div>
+      <div class="steps" id="steps"></div>
+      <div id="results"></div>
+    </div>
+    <footer>
+      <div id="refine" hidden>
+        <div class="sug" id="sug"></div>
+        <div class="inline-form">
+          <input id="refine-input" type="text" maxlength="200" placeholder="Ex. : plutôt sans fil, autonomie de 30 h, moins de 120 €">
+          <button class="chip sel" id="refine-go">Relancer</button>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="chip" id="more" disabled>Continuer la recherche</button>
+        <button class="chip sel" id="precise" disabled>Préciser la recherche</button>
+      </div>
+    </footer>
+  </section>
+  <script>
+  (function () {
+    const C = window.Corrtex, S = window.CorrtexShop;
+    const $ = (id) => document.getElementById(id);
+    const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+    const eur = (n) => n == null ? '' : n.toLocaleString('fr-FR', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }) + ' €';
+    const close = () => C.invoke('close_panel');
+    $('close').onclick = close;
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('refine').hidden) close(); });
+    const open = (url) => { if (url) C.invoke('new_tab', { url }); };
+    const fetchPage = (url) => window.__TAURI__.core.invoke('shop_fetch', { url });
+
+    // ------------------------------------------------------------ IA (page d'IA cachée, sans clé d'API)
+    let aiSeq = 0;
+    const aiWait = {};
+    window.__corrtexShopAI = (req, text, done, error) => {
+      const w = aiWait[req];
+      if (!w) return;
+      w.text = text || w.text;
+      if (done || error) {
+        delete aiWait[req];
+        clearTimeout(w.timer);
+        if (error && !w.text) w.reject('pas de réponse de l’IA'); else w.resolve(w.text);
+      }
+    };
+    function ask(prompt) {
+      return new Promise((resolve, reject) => {
+        const req = 'sp' + Date.now().toString(36) + (++aiSeq);
+        aiWait[req] = { resolve, reject, text: '', timer: setTimeout(() => { delete aiWait[req]; reject('délai dépassé'); }, 100000) };
+        C.invoke('shop_ask_ai', { prompt, req }).catch((e) => { delete aiWait[req]; reject(String(e)); });
+      });
+    }
+    // premier objet JSON de la réponse (l'IA ajoute parfois du texte ou des balises de code)
+    function json(text) {
+      const t = String(text || '').replace(/```(?:json)?/g, '');
+      const i = t.indexOf('{');
+      if (i < 0) return null;
+      const r = S.grab(t, '{', i);
+      return r ? r.value : null;
+    }
+
+    // ------------------------------------------------------------ état de la recherche
+    let job = null, busy = false;
+    const save = () => C.invoke('shopping_save', { data: job }).catch(() => {});
+    function brief() {
+      let s = '« ' + job.goal + ' »';
+      if (job.refinements.length) s += '\nPrécisions données ensuite par l’utilisateur :\n' + job.refinements.map((r) => '- ' + r).join('\n');
+      return s;
+    }
+
+    // étapes affichées pendant la recherche
+    function step(text) {
+      const s = el('div', 'step run');
+      s.append(el('i'), el('span', '', text));
+      $('steps').appendChild(s);
+      return {
+        ok(t) { s.className = 'step ok'; if (t) s.lastChild.textContent = t; },
+        fail(t) { s.className = 'step err'; if (t) s.lastChild.textContent = t; },
+      };
+    }
+
+    // 1. la demande devient des recherches précises pour le comparateur
+    async function plan(more) {
+      const st = step(more ? 'L’IA cherche d’autres pistes…' : 'L’IA analyse la demande…');
+      const prompt = 'Tu aides à trouver le meilleur article à acheter en France. Demande de l’utilisateur : ' + brief() + '\n\n' +
+        (more ? 'Recherches déjà faites : ' + job.queriesDone.join(' ; ') + '\nArticles déjà proposés : ' + shownNames().join(' ; ') +
+          '\nPropose de NOUVELLES recherches, différentes des précédentes (autres marques, autres modèles, autres gammes de prix).\n\n' : '') +
+        'Réponds UNIQUEMENT par un objet JSON, sans aucun texte autour :\n' +
+        '{"summary":"la demande reformulée en une phrase courte","queries":["3 ou 4 recherches courtes pour le comparateur de prix leDénicheur : de préférence des modèles précis (marque + modèle) réputés pour cette demande, sinon la catégorie avec ses caractéristiques clés"],"budget_min":null,"budget_max":null,"must":["caractéristiques indispensables, en quelques mots"],"avoid":["mots qui signalent un mauvais résultat, par ex. accessoires"]}\n' +
+        'budget_min et budget_max sont des nombres en euros, ou null s’ils ne sont pas donnés.';
+      let p = null;
+      try { p = json(await ask(prompt)); } catch (e) {}
+      if (!p || !Array.isArray(p.queries) || !p.queries.length) {
+        // sans réponse de l'IA : la demande elle-même, débarrassée des mots inutiles
+        const q = job.goal.replace(/\b(trouve|trouver|cherche|chercher|moi|je|un|une|des|le|la|les|meilleur|meilleure|pas cher|moins de|à|a|pour|acheter)\b/gi, ' ').replace(/\d+\s*(€|euros?)/gi, ' ').replace(/\s+/g, ' ').trim();
+        const budget = (job.goal.match(/(\d+)\s*(€|euros?)/i) || [])[1];
+        p = { summary: '', queries: [q || job.goal], budget_max: budget ? +budget : null, must: [], avoid: [] };
+        st.fail('IA indisponible : recherche directe');
+      } else st.ok(more ? 'Nouvelles pistes : ' + p.queries.length + ' recherches' : 'Demande analysée : ' + p.queries.length + ' recherches');
+      const q = p.queries.map((x) => String(x).trim()).filter((x) => x && job.queriesDone.indexOf(x) < 0).slice(0, 4);
+      if (!more || !job.plan) job.plan = { summary: p.summary || '', budget_min: num(p.budget_min), budget_max: num(p.budget_max), must: arr(p.must), avoid: arr(p.avoid) };
+      return q;
+    }
+    const num = (v) => (typeof v === 'number' && v > 0 ? v : null);
+    const arr = (v) => (Array.isArray(v) ? v.map(String).filter(Boolean).slice(0, 8) : []);
+
+    // 2. recherches sur le comparateur
+    async function search(queries) {
+      const fresh = [];
+      for (const q of queries) {
+        const st = step('Recherche « ' + q + ' » sur leDénicheur…');
+        try {
+          const list = S.parseSearch(await fetchPage('https://ledenicheur.fr/search?query=' + encodeURIComponent(q)));
+          let n = 0;
+          list.forEach((c) => {
+            if (job.cands[c.id]) return;
+            c.q = q;
+            job.cands[c.id] = c;
+            fresh.push(c);
+            n++;
+          });
+          st.ok('« ' + q + ' » : ' + list.length + ' produit' + (list.length > 1 ? 's' : '') + (n < list.length ? ' (' + n + ' nouveaux)' : ''));
+        } catch (e) { st.fail('« ' + q + ' » : ' + e); }
+        job.queriesDone.push(q);
+      }
+      return fresh;
+    }
+
+    // accessoires (pas les mots « pour », « compatible »… trop courants dans les noms de produits)
+    const ACC = /\b(housse|coque|etui|étui|coussinets?|oreillettes? de rechange|embouts?|cable|câble|chargeur|support|protection|film|adaptateur|remplacement|replacement|pochette|sacoche|bracelet|skin|grip|tapis)\b/i;
+    // pré-tri avant le suivi des prix : pertinence, budget, notes ; accessoires écartés
+    function prescore(c) {
+      const P = job.plan || {};
+      const text = job.goal + ' ' + job.refinements.join(' ');
+      if (ACC.test(c.name) && !ACC.test(text)) return -1;
+      if ((P.avoid || []).some((w) => w && S.norm(c.name).indexOf(S.norm(w)) >= 0)) return -1;
+      let s = Math.max(S.score(c.q || '', c.name), 0) * 2;
+      if (c.price != null && P.budget_max && c.price > P.budget_max * 1.08) return -1;
+      if (c.price != null && P.budget_min && c.price < P.budget_min * 0.7) s -= 0.5;
+      if (c.rating) s += (c.rating - 3) * 0.4 + Math.min(Math.log10((c.reviews || 0) + 1), 3) * 0.25;
+      if (c.price == null) s -= 0.6;
+      return s;
+    }
+
+    // 3. suivi des prix : offres et historique de chaque article retenu
+    function trend(hist, low) {
+      if (!hist || hist.length < 2) return null;
+      // l'historique ne contient que les changements de prix : chaque prix vaut jusqu'au suivant
+      const day = {};
+      hist.forEach((h) => { const d = Math.floor(h.t / 864e5); if (day[d] == null || h.price < day[d]) day[d] = h.price; });
+      const known = Object.keys(day).map(Number).sort((a, b) => a - b);
+      const today = Math.floor(Date.now() / 864e5), from = Math.max(known[0], today - 90);
+      let k = 0, cur = null;
+      while (k < known.length && known[k] <= from) cur = day[known[k++]];
+      const pts = [];
+      for (let d = from; d <= today; d++) {
+        while (k < known.length && known[k] <= d) cur = day[known[k++]];
+        if (cur != null) pts.push(cur);
+      }
+      if (pts.length < 2) return null;
+      const now = low != null ? low : pts[pts.length - 1];
+      pts[pts.length - 1] = now;
+      const min = Math.min(...pts), max = Math.max(...pts), avg = pts.reduce((a, b) => a + b, 0) / pts.length;
+      // courbe réduite (40 points au plus) pour la petite courbe
+      const stepN = Math.max(1, Math.ceil(pts.length / 40));
+      const series = pts.filter((x, i) => i % stepN === 0 || i === pts.length - 1).map((x) => Math.round(x * 100) / 100);
+      return { min, max, avg: Math.round(avg * 100) / 100, cur: now, days: pts.length - 1, vsAvg: Math.round((now - avg) / avg * 100), atLow: now <= min * 1.02 && max > min * 1.03, series };
+    }
+    async function enrich(list) {
+      const st = step('Suivi des prix de ' + list.length + ' article' + (list.length > 1 ? 's' : '') + '…');
+      let done = 0;
+      const one = async (c) => {
+        try {
+          const d = S.parseProduct(await fetchPage(c.url));
+          c.low = d.low != null ? d.low : c.price;
+          c.offerCount = d.offerCount || d.offers.length;
+          c.offers = d.offers.slice(0, 3).map((o) => ({ shop: o.shop, price: o.price, url: o.url, stock: o.stock }));
+          c.trend = trend(d.history, c.low);
+        } catch (e) { c.low = c.price; }
+        c.enriched = true;
+        st.ok('Suivi des prix : ' + (++done) + ' / ' + list.length);
+      };
+      // trois pages à la fois
+      const queue = list.slice();
+      await Promise.all([0, 1, 2].map(async () => { while (queue.length) await one(queue.shift()); }));
+      st.ok('Prix suivis sur ' + list.length + ' article' + (list.length > 1 ? 's' : ''));
+    }
+
+    // 4. l'IA choisit les meilleurs avec les prix et leur évolution
+    async function rank(list) {
+      const st = step('L’IA compare les articles et leurs prix…');
+      const rows = list.map((c, i) => {
+        const t = c.trend;
+        return i + ' | ' + c.name + ' | ' + (c.low != null ? eur(c.low) : '?') + ' | ' + (c.offerCount || 0) + ' marchands | ' +
+          (c.rating ? c.rating + '/5 (' + (c.reviews || 0) + ' avis)' : 'pas de note') + ' | ' +
+          (t ? 'mini ' + eur(t.min) + ', moyen ' + eur(t.avg) + ', maxi ' + eur(t.max) + ' sur ' + t.days + ' jours, ' + (t.vsAvg > 0 ? '+' : '') + t.vsAvg + ' % par rapport au prix moyen' + (t.atLow ? ', au plus bas' : '') : 'pas d’historique');
+      });
+      const prompt = 'Demande d’achat : ' + brief() + '\n' +
+        (job.plan && (job.plan.must.length || job.plan.budget_max) ? 'Critères : ' + job.plan.must.join(', ') + (job.plan.budget_max ? ' ; budget maximum ' + eur(job.plan.budget_max) : '') + '\n' : '') +
+        '\nVoici des articles trouvés sur le comparateur leDénicheur, avec le suivi de leur prix sur les derniers mois :\n' +
+        'n | nom | prix le plus bas actuel | marchands | note | évolution du prix\n' + rows.join('\n') + '\n\n' +
+        'Choisis les 5 meilleurs articles pour cette demande (moins s’il y en a peu de pertinents), du meilleur au moins bon, ' +
+        'en tenant compte de la correspondance avec la demande, de la qualité (notes, nombre d’avis), du prix et de son évolution : ' +
+        'un prix au plus bas ou nettement sous sa moyenne est un bon moment pour acheter, un prix au-dessus de sa moyenne peut inciter à attendre. ' +
+        'Écarte les articles hors sujet ou hors budget.\n' +
+        'Réponds UNIQUEMENT par un objet JSON, sans aucun texte autour :\n' +
+        '{"picks":[{"n":0,"why":"pourquoi cet article, en une ou deux phrases concrètes","timing":"buy | wait | ok"}],"advice":"conseil d’ensemble en deux phrases au plus","refine":["2 à 4 précisions utiles que l’utilisateur pourrait donner, formulées comme des choix très courts, par ex. « Plutôt intra-auriculaire »"],"next":["2 ou 3 nouvelles recherches pour continuer"]}';
+      let r = null;
+      try { r = json(await ask(prompt)); } catch (e) {}
+      if (!r || !Array.isArray(r.picks)) {
+        // sans l'IA : les mieux notés au prix le plus intéressant
+        const sorted = list.slice().sort((a, b) => prescore(b) + (b.trend && b.trend.atLow ? 0.3 : 0) - prescore(a) - (a.trend && a.trend.atLow ? 0.3 : 0));
+        r = { picks: sorted.slice(0, 5).map((c) => ({ n: list.indexOf(c), why: '', timing: c.trend && c.trend.atLow ? 'buy' : 'ok' })), advice: '', refine: [], next: [] };
+        st.fail('IA indisponible : classement par notes et prix');
+      } else st.ok('Sélection faite');
+      const picks = [];
+      r.picks.forEach((p) => {
+        const c = list[+p.n];
+        if (c && !picks.some((x) => x.id === c.id)) picks.push({ id: c.id, why: String(p.why || ''), timing: /^(buy|wait|ok)$/.test(p.timing) ? p.timing : 'ok' });
+      });
+      return { picks: picks.slice(0, 5), advice: String(r.advice || ''), refine: arr(r.refine).slice(0, 4), next: arr(r.next).slice(0, 3) };
+    }
+
+    const shownIds = () => job.rounds.reduce((a, r) => a.concat(r.picks.map((p) => p.id)), []);
+    const shownNames = () => shownIds().map((id) => job.cands[id] && job.cands[id].name).filter(Boolean).slice(0, 20);
+
+    // une recherche complète : « new » (première ou précisée) ou « more » (continuer)
+    async function run(mode) {
+      if (busy) return;
+      busy = true;
+      buttons();
+      $('steps').innerHTML = '';
+      if (mode === 'new') { job.rounds = []; $('results').innerHTML = ''; }
+      renderGoal();
+      try {
+        let queries = mode === 'more' && job.next && job.next.length ? job.next.filter((q) => job.queriesDone.indexOf(q) < 0) : [];
+        if (!queries.length) queries = await plan(mode === 'more');
+        renderGoal();
+        await search(queries);
+        // tous les articles connus (les précisions réutilisent ceux déjà trouvés), hors déjà proposés si on continue
+        const skip = mode === 'more' ? shownIds() : [];
+        let pool = Object.values(job.cands).filter((c) => skip.indexOf(c.id) < 0).map((c) => [prescore(c), c]).filter((x) => x[0] >= 0);
+        pool.sort((a, b) => b[0] - a[0]);
+        pool = pool.slice(0, 10).map((x) => x[1]);
+        if (!pool.length) {
+          job.rounds.push({ title: mode === 'more' ? 'Rien de nouveau' : 'Aucun article', picks: [], advice: mode === 'more' ? 'Pas d’autre article pertinent trouvé. Essayez de préciser la recherche.' : 'Aucun article ne correspond. Précisez la recherche (autre formulation, budget, marque…).', empty: true });
+        } else {
+          const need = pool.filter((c) => !c.enriched);
+          if (need.length) await enrich(need);
+          const r = await rank(pool);
+          job.rounds.push({ title: mode === 'more' ? 'Autres articles' : job.refinements.length ? 'Meilleurs articles après précision' : 'Meilleurs articles', picks: r.picks, advice: r.advice });
+          job.suggestions = r.refine;
+          job.next = r.next;
+        }
+      } catch (e) {
+        step('Erreur : ' + e).fail();
+      }
+      busy = false;
+      job.fresh = false;
+      save();
+      renderResults();
+      buttons();
+      const last = $('results').lastElementChild;
+      if (mode === 'more' && last) last.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // ------------------------------------------------------------ affichage
+    function renderGoal() {
+      const g = $('goal');
+      g.innerHTML = '';
+      g.appendChild(el('div', 'q', job.goal));
+      if (job.plan && job.plan.summary) g.appendChild(el('div', 'sum', job.plan.summary));
+      const tags = el('div', 'tags');
+      job.refinements.forEach((r) => tags.appendChild(el('span', '', r)));
+      if (job.plan) {
+        if (job.plan.budget_max) tags.appendChild(el('span', '', 'Budget ≤ ' + eur(job.plan.budget_max)));
+        (job.plan.must || []).slice(0, 4).forEach((m) => tags.appendChild(el('span', '', m)));
+      }
+      if (tags.children.length) g.appendChild(tags);
+    }
+
+    function spark(series) {
+      const W = 110, H = 26, min = Math.min(...series), max = Math.max(...series), span = max - min || 1;
+      const pts = series.map((p, i) => [i / (series.length - 1) * (W - 4) + 2, H - 3 - (p - min) / span * (H - 6)]);
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+      svg.setAttribute('class', 'spark');
+      const path = document.createElementNS(svg.namespaceURI, 'path');
+      path.setAttribute('d', 'M' + pts.map((p) => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L'));
+      const dot = document.createElementNS(svg.namespaceURI, 'circle');
+      const lp = pts[pts.length - 1];
+      dot.setAttribute('cx', lp[0]); dot.setAttribute('cy', lp[1]); dot.setAttribute('r', 2.6);
+      svg.append(path, dot);
+      return svg;
+    }
+
+    function card(p, i, first) {
+      const c = job.cands[p.id];
+      if (!c) return null;
+      const k = el('div', 'card' + (first && i === 0 ? ' top' : ''));
+      if (first) k.appendChild(el('div', 'rank', String(i + 1)));
+      const best = c.offers && c.offers[0];
+      const pic = el('div', 'pic');
+      if (c.image) { const im = new Image(); im.src = c.image; im.alt = ''; im.loading = 'lazy'; im.onerror = () => im.remove(); pic.appendChild(im); }
+      pic.onclick = () => open(c.url);
+      const b = el('div', 'body');
+      const name = el('div', 'name', c.name);
+      name.title = 'Comparer les prix sur leDénicheur';
+      name.onclick = () => open(c.url);
+      b.appendChild(name);
+      const meta = el('div', 'meta');
+      if (c.rating) { const s = el('span'); s.append(el('span', 'stars', '★ ' + c.rating.toLocaleString('fr-FR', { maximumFractionDigits: 1 })), document.createTextNode(' (' + (c.reviews || 0).toLocaleString('fr-FR') + ' avis)')); meta.appendChild(s); }
+      if (c.offerCount) meta.appendChild(el('span', '', c.offerCount + ' marchand' + (c.offerCount > 1 ? 's' : '')));
+      if (meta.children.length) b.appendChild(meta);
+      const pl = el('div', 'priceline');
+      const price = best ? best.price : c.low != null ? c.low : c.price;
+      pl.appendChild(el('span', 'price', price != null ? eur(price) : 'Prix indisponible'));
+      if (best) pl.appendChild(el('span', 'shop', 'chez ' + best.shop + (best.stock ? ' · en stock' : '')));
+      b.appendChild(pl);
+      const t = c.trend;
+      const tr = el('div', 'trend');
+      const timing = { buy: ['good', 'Bon moment pour acheter'], wait: ['bad', 'Mieux vaut attendre'], ok: ['mid', 'Prix habituel'] }[p.timing] || null;
+      if (t) {
+        const txt = t.atLow ? 'Au plus bas sur ' + Math.max(t.days, 1) + ' j' : (t.vsAvg > 0 ? '+' : '') + t.vsAvg + ' % / moyenne ' + eur(t.avg);
+        const cls = t.atLow || t.vsAvg <= -5 ? 'good' : t.vsAvg >= 5 ? 'bad' : 'mid';
+        const bd = el('span', 'badge ' + cls, txt);
+        bd.title = 'Sur ' + t.days + ' jours : de ' + eur(t.min) + ' à ' + eur(t.max) + ' (moyenne ' + eur(t.avg) + ')';
+        tr.appendChild(bd);
+        if (t.series.length > 2) tr.appendChild(spark(t.series));
+      } else if (timing) tr.appendChild(el('span', 'badge ' + timing[0], timing[1]));
+      if (tr.children.length) b.appendChild(tr);
+      if (p.why) b.appendChild(el('div', 'why', p.why));
+      const acts = el('div', 'acts');
+      if (best) { const o = el('button', 'main', 'Voir l’offre'); o.onclick = () => open(best.url); acts.appendChild(o); }
+      const cmp = el('button', best ? '' : 'main', 'Comparer les prix');
+      cmp.onclick = () => open(c.url);
+      acts.appendChild(cmp);
+      if (t && timing && p.timing !== 'ok') { const tb = el('span', 'badge ' + timing[0], timing[1]); tb.style.alignSelf = 'center'; acts.appendChild(tb); }
+      b.appendChild(acts);
+      k.append(pic, b);
+      return k;
+    }
+
+    function renderResults() {
+      const box = $('results');
+      box.innerHTML = '';
+      job.rounds.forEach((r, ri) => {
+        box.appendChild(el('div', 'round-title', r.title));
+        if (r.advice) { const a = el('div', 'advice'); a.appendChild(el('b', '', 'Conseil : ')); a.appendChild(document.createTextNode(r.advice)); box.appendChild(a); }
+        if (!r.picks.length && r.empty) return;
+        r.picks.forEach((p, i) => { const k = card(p, i, ri === 0); if (k) box.appendChild(k); });
+      });
+      renderSuggestions();
+    }
+
+    function renderSuggestions() {
+      const sug = $('sug');
+      sug.innerHTML = '';
+      (job.suggestions || []).forEach((s) => {
+        const b = el('button', '', s);
+        b.onclick = () => { b.classList.toggle('on'); };
+        sug.appendChild(b);
+      });
+    }
+
+    function buttons() {
+      $('more').disabled = busy || !job;
+      $('precise').disabled = busy || !job;
+      $('more').textContent = busy ? 'Recherche en cours…' : 'Continuer la recherche';
+    }
+
+    // ------------------------------------------------------------ boutons du bas
+    $('more').onclick = () => { $('refine').hidden = true; run('more'); };
+    $('precise').onclick = () => {
+      const r = $('refine');
+      r.hidden = !r.hidden;
+      $('precise').textContent = r.hidden ? 'Préciser la recherche' : 'Annuler';
+      if (!r.hidden) setTimeout(() => $('refine-input').focus(), 30);
+    };
+    function refine() {
+      const picked = Array.from($('sug').querySelectorAll('button.on')).map((b) => b.textContent);
+      const typed = $('refine-input').value.trim();
+      const all = picked.concat(typed ? [typed] : []);
+      if (!all.length) { $('refine-input').focus(); return; }
+      job.refinements = job.refinements.concat(all).slice(-8);
+      $('refine-input').value = '';
+      $('refine').hidden = true;
+      $('precise').textContent = 'Préciser la recherche';
+      job.next = [];
+      run('new');
+    }
+    $('refine-go').onclick = refine;
+    $('refine-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') refine();
+      if (e.key === 'Escape') { $('refine').hidden = true; $('precise').textContent = 'Préciser la recherche'; }
+    });
+
+    // ------------------------------------------------------------ démarrage
+    async function load() {
+      const j = await C.invoke('shopping_job').catch(() => null);
+      if (!j || !j.goal) {
+        $('goal').textContent = 'Demandez à l’agent du panneau IA de vous trouver un article (ex. « un aspirateur sans fil à moins de 200 € »).';
+        return;
+      }
+      job = Object.assign({ refinements: [], queriesDone: [], cands: {}, rounds: [], suggestions: [], next: [], plan: null }, j);
+      renderGoal();
+      if (j.fresh) {
+        job = { goal: j.goal, fresh: true, refinements: [], queriesDone: [], cands: {}, rounds: [], suggestions: [], next: [], plan: null };
+        run('new');
+      } else {
+        renderResults();
+        buttons();
+      }
+    }
+    window.__corrtexShoppingReload = () => { if (!busy) load(); else setTimeout(window.__corrtexShoppingReload, 1500); };
+    load();
+  })();
+  </script>
+  <script>requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById('drawer').classList.add('open')));</script>
+</body>
+</html>

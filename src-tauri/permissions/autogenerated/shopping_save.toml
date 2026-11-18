@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-shopping-save"
+description = "Enables the shopping_save command without any pre-configured scope."
+commands.allow = ["shopping_save"]
+
+[[permission]]
+identifier = "deny-shopping-save"
+description = "Denies the shopping_save command without any pre-configured scope."
+commands.deny = ["shopping_save"]

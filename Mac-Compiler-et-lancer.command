@@ -36,7 +36,7 @@ echo
 echo " Compilation de Corrtex (la première fois : 5 à 10 minutes, ensuite bien plus rapide)…"
 echo
 cd "$ROOT/src-tauri" || exit 1
-cargo tauri build --bundles app || fail "La compilation a échoué. Copiez le message ci-dessus et envoyez-le à Claude."
+cargo tauri build --bundles app --config '{"bundle":{"createUpdaterArtifacts":false}}' || fail "La compilation a échoué. Copiez le message ci-dessus et envoyez-le à Claude."
 
 APP="$ROOT/src-tauri/target/release/bundle/macos/Corrtex.app"
 [ -d "$APP" ] || fail "Corrtex.app est introuvable après la compilation."

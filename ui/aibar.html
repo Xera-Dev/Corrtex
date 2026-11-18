@@ -117,7 +117,7 @@
     <textarea id="agent-goal" rows="2" maxlength="500" placeholder="Ex. : trouve le moins cher de ces casques et ouvre sa fiche"></textarea>
     <div class="ex" id="agent-ex"></div>
     <div class="foot">
-      <span class="note">Vous validez chaque action. L’agent ne saisit jamais de mot de passe ni de paiement.</span>
+      <span class="note">Vous validez chaque action. Pour un achat, l’agent compare les prix et leur évolution. Jamais de mot de passe ni de paiement.</span>
       <button id="agent-cancel" class="chip">Annuler</button>
       <button id="agent-go" class="chip sel" disabled>Lancer</button>
     </div>
@@ -240,7 +240,7 @@
       // ---------------------------------------------------------------- agent
       const agentBox = document.getElementById('agent'), agentBtn = document.getElementById('agent-btn');
       const goal = document.getElementById('agent-goal'), agentGo = document.getElementById('agent-go');
-      const EX = ['Résume les avis de ce produit', 'Trouve le prix le plus bas', 'Remplis la recherche avec Paris, 2 personnes', 'Trouve la page de contact'];
+      const EX = ['Trouve-moi un casque Bluetooth à moins de 150 €', 'Résume les avis de ce produit', 'Trouve le prix le plus bas', 'Remplis la recherche avec Paris, 2 personnes', 'Trouve la page de contact'];
       for (const t of EX) {
         const b = document.createElement('button');
         b.textContent = t;
