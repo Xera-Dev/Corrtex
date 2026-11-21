@@ -71,7 +71,7 @@
       const c = job.cands[p.id];
       if (!c) return null;
       const best = c.offers && c.offers[0];
-      return { id: c.id, name: c.name, image: c.image || '', url: c.url, price: best ? best.price : c.low != null ? c.low : c.price,
+      return { id: c.id, name: c.name, image: c.image || '', url: c.ext ? 'https://ledenicheur.fr/search?query=' + encodeURIComponent(c.name) : c.url, price: best ? best.price : c.low != null ? c.low : c.price,
         shop: best ? best.shop : '', stock: best ? !!best.stock : false, offer: best ? best.url : '', rating: c.rating || null, reviews: c.reviews || 0,
         offers: c.offerCount || 0, trend: c.trend || null, why: p.why || '', timing: p.timing || 'ok' };
     }
@@ -148,6 +148,34 @@
         } catch (e) { st.fail('« ' + q + ' » : ' + e); }
         job.queriesDone.push(q);
       }
+      await searchShops(queries);
+    }
+
+    // 2 bis. boutiques ajoutées dans les réglages : les deux premières recherches sur chacune
+    async function searchShops(queries) {
+      const sites = ((await C.invoke('shop_sites_get').catch(() => [])) || []).filter((s) => s.on).slice(0, 12);
+      if (!sites.length || !queries.length) return;
+      const tasks = [];
+      sites.forEach((site) => queries.slice(0, 2).forEach((q) => tasks.push([site, q])));
+      const one = async (site, q) => {
+        const st = step('Recherche « ' + q + ' » sur ' + site.name + '…');
+        const url = site.search.split('{q}').join(encodeURIComponent(q));
+        try {
+          const list = S.parseShopGeneric(await fetchPage(url), url);
+          let n = 0;
+          list.forEach((c) => {
+            const id = 'x' + S.norm(site.name + ' ' + c.name).replace(/ /g, '').slice(0, 80);
+            if (job.cands[id]) return;
+            // pas de suivi des prix pour une boutique seule : son prix est l'offre
+            job.cands[id] = Object.assign(c, { id, q, ext: site.name, enriched: true, low: c.price, offerCount: 1, trend: null,
+              offers: c.price != null ? [{ shop: site.name, price: c.price, url: c.url, stock: true }] : [] });
+            n++;
+          });
+          if (list.length) st.ok(site.name + ' · « ' + q + ' » : ' + list.length + ' produit' + (list.length > 1 ? 's' : '') + (n < list.length ? ' (' + n + ' nouveaux)' : ''));
+          else st.fail(site.name + ' · « ' + q + ' » : aucun article lisible (la page se construit peut-être en JavaScript)');
+        } catch (e) { st.fail(site.name + ' · « ' + q + ' » : ' + e); }
+      };
+      await Promise.all([0, 1, 2].map(async () => { while (tasks.length) { const t = tasks.shift(); await one(t[0], t[1]); } }));
     }
 
     // accessoires (pas les mots « pour », « compatible »… trop courants dans les noms de produits)
@@ -213,14 +241,14 @@
       const st = step('L’IA compare les articles et leurs prix…');
       const rows = list.map((c, i) => {
         const t = c.trend;
-        return i + ' | ' + c.name + ' | ' + (c.low != null ? eur(c.low) : '?') + ' | ' + (c.offerCount || 0) + ' marchands | ' +
+        return i + ' | ' + c.name + ' | ' + (c.low != null ? eur(c.low) : '?') + ' | ' + (c.ext ? 'boutique ' + c.ext : (c.offerCount || 0) + ' marchands') + ' | ' +
           (c.rating ? c.rating + '/5 (' + (c.reviews || 0) + ' avis)' : 'pas de note') + ' | ' +
-          (t ? 'mini ' + eur(t.min) + ', moyen ' + eur(t.avg) + ', maxi ' + eur(t.max) + ' sur ' + t.days + ' jours, ' + (t.vsAvg > 0 ? '+' : '') + t.vsAvg + ' % par rapport au prix moyen' + (t.atLow ? ', au plus bas' : '') : 'pas d’historique');
+          (t ? 'mini ' + eur(t.min) + ', moyen ' + eur(t.avg) + ', maxi ' + eur(t.max) + ' sur ' + t.days + ' jours, ' + (t.vsAvg > 0 ? '+' : '') + t.vsAvg + ' % par rapport au prix moyen' + (t.atLow ? ', au plus bas' : '') : c.ext ? 'prix d’une seule boutique, pas d’historique' : 'pas d’historique');
       });
       const prompt = 'Demande d’achat : ' + brief() + '\n' +
         (job.plan && (job.plan.must.length || job.plan.budget_max) ? 'Critères : ' + job.plan.must.join(', ') + (job.plan.budget_max ? ' ; budget maximum ' + eur(job.plan.budget_max) : '') + '\n' : '') +
-        '\nVoici des articles trouvés sur le comparateur leDénicheur, avec le suivi de leur prix sur les derniers mois :\n' +
-        'n | nom | prix le plus bas actuel | marchands | note | évolution du prix\n' + rows.join('\n') + '\n\n' +
+        '\nVoici des articles trouvés sur le comparateur leDénicheur (avec le suivi de leur prix sur les derniers mois) et sur des boutiques en ligne :\n' +
+        'n | nom | prix le plus bas actuel | marchands ou boutique | note | évolution du prix\n' + rows.join('\n') + '\n\n' +
         'Choisis les 5 meilleurs articles pour cette demande (moins s’il y en a peu de pertinents), du meilleur au moins bon, ' +
         'en tenant compte de la correspondance avec la demande, de la qualité (notes, nombre d’avis), du prix et de son évolution : ' +
         'un prix au plus bas ou nettement sous sa moyenne est un bon moment pour acheter, un prix au-dessus de sa moyenne peut inciter à attendre. ' +

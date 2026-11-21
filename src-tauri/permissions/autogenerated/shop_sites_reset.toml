@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-shop-sites-reset"
+description = "Enables the shop_sites_reset command without any pre-configured scope."
+commands.allow = ["shop_sites_reset"]
+
+[[permission]]
+identifier = "deny-shop-sites-reset"
+description = "Denies the shop_sites_reset command without any pre-configured scope."
+commands.deny = ["shop_sites_reset"]

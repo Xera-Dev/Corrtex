@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-shop-sites-set"
+description = "Enables the shop_sites_set command without any pre-configured scope."
+commands.allow = ["shop_sites_set"]
+
+[[permission]]
+identifier = "deny-shop-sites-set"
+description = "Denies the shop_sites_set command without any pre-configured scope."
+commands.deny = ["shop_sites_set"]

@@ -146,151 +146,189 @@
       </button>
     </header>
 
-    <div class="group">
-      <h3>IA à privilégier</h3>
-      <p class="hint">Celle qui s’ouvre dans le panneau latéral.</p>
-      <div id="set-ai" class="chips"></div>
-      <div class="row" style="margin-top:16px">
-        <span class="hint" style="margin:0">Mémoire des conversations par site</span>
-        <label class="switch"><input type="checkbox" id="set-memory"><span></span></label>
+    <details class="cat" data-cat="ia">
+      <summary><span class="cat-ic"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg></span><span class="cat-t"><b>Assistant IA et agent</b><small>IA à privilégier, boutiques de l’agent d’achat</small></span><svg class="cat-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></summary>
+      <div class="cat-body">
+        <div class="group">
+          <h3>IA à privilégier</h3>
+          <p class="hint">Celle qui s’ouvre dans le panneau latéral.</p>
+          <div id="set-ai" class="chips"></div>
+          <div class="row" style="margin-top:16px">
+            <span class="hint" style="margin:0">Mémoire des conversations par site</span>
+            <label class="switch"><input type="checkbox" id="set-memory"><span></span></label>
+          </div>
+          <p class="hint" style="margin-top:6px">Le panneau IA rouvre automatiquement la conversation que vous aviez sur chaque site.</p>
+        </div>
+        <div class="group">
+          <h3>Agent de recherche d’achat</h3>
+          <p class="hint">Les boutiques que l’agent visite pour une recherche d’achat, en plus du comparateur leDénicheur (toujours utilisé, avec le suivi des prix).</p>
+          <div class="list" id="shop-sites"></div>
+          <p class="hint" style="margin-top:14px">Ajouter une boutique : faites une recherche du mot <b>TEST</b> sur le site, puis collez l’adresse de la page de résultats.</p>
+          <div class="inline-form shop-add" style="margin-top:8px">
+            <input id="shop-name" type="text" spellcheck="false" maxlength="40" placeholder="Nom (ex. Leroy Merlin)">
+            <input id="shop-url" type="text" spellcheck="false" placeholder="https://www.site.fr/recherche?q=TEST">
+            <button class="chip sel" id="shop-add">Ajouter</button>
+          </div>
+          <p class="hint" id="shop-msg" hidden></p>
+          <div class="chips" style="margin-top:10px"><button class="chip" id="shop-reset">Remettre la liste par défaut</button></div>
+          <p class="hint" style="margin-top:10px">Certaines boutiques refusent les visites automatiques ou construisent leurs pages en JavaScript : l’agent les signale et continue sans elles.</p>
+        </div>
       </div>
-      <p class="hint" style="margin-top:6px">Le panneau IA rouvre automatiquement la conversation que vous aviez sur chaque site.</p>
-    </div>
+    </details>
 
-    <div class="group">
-      <h3>Confidentialité</h3>
-      <div class="row" style="margin-top:12px">
-        <span class="hint" style="margin:0">Enregistrer les pages visitées dans l’historique</span>
-        <label class="switch"><input type="checkbox" id="set-history"><span></span></label>
+    <details class="cat" data-cat="nav">
+      <summary><span class="cat-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span><span class="cat-t"><b>Navigation</b><small>Confidentialité, onglets, gestes et raccourcis</small></span><svg class="cat-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></summary>
+      <div class="cat-body">
+        <div class="group">
+          <h3>Confidentialité</h3>
+          <div class="row" style="margin-top:12px">
+            <span class="hint" style="margin:0">Enregistrer les pages visitées dans l’historique</span>
+            <label class="switch"><input type="checkbox" id="set-history"><span></span></label>
+          </div>
+          <p class="hint" style="margin-top:6px">Les fenêtres privées ne sont jamais enregistrées.</p>
+        </div>
+        <div class="group">
+          <h3>Onglets</h3>
+          <div class="row" style="margin-top:12px">
+            <span class="hint" style="margin:0">Rouvrir les onglets de la dernière fois</span>
+            <label class="switch"><input type="checkbox" id="set-restore"><span></span></label>
+          </div>
+          <p class="hint" style="margin-top:14px">Mettre en veille les onglets inactifs après :</p>
+          <div id="set-sleep" class="chips"></div>
+        </div>
+        <div class="group">
+          <h3>Gestes et raccourcis</h3>
+          <div class="row" style="margin-top:12px">
+            <span class="hint" style="margin:0">Gestes de la souris (clic droit maintenu + glisser)</span>
+            <label class="switch"><input type="checkbox" id="set-gestures"><span></span></label>
+          </div>
+          <p class="hint" style="margin-top:6px">← précédent · → suivant · ↑ actualiser · ↓ nouvel onglet · ↓→ fermer · ←↑ rouvrir</p>
+          <p class="hint" style="margin-top:14px">Raccourcis clavier : cliquez sur une touche puis tapez la nouvelle combinaison.</p>
+          <div id="set-keys" class="list"></div>
+        </div>
       </div>
-      <p class="hint" style="margin-top:6px">Les fenêtres privées ne sont jamais enregistrées.</p>
-    </div>
+    </details>
 
-    <div class="group">
-      <h3>Onglets</h3>
-      <div class="row" style="margin-top:12px">
-        <span class="hint" style="margin:0">Rouvrir les onglets de la dernière fois</span>
-        <label class="switch"><input type="checkbox" id="set-restore"><span></span></label>
+    <details class="cat" data-cat="look">
+      <summary><span class="cat-ic"><svg viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.1 0 1.7-.9 1.4-1.9-.3-1 .4-2 1.5-2h2a3.6 3.6 0 0 0 3.6-3.6c0-5.3-3.8-9.5-8.5-9.5z"/><circle cx="7.8" cy="11" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="15" cy="7.8" r="1"/></svg></span><span class="cat-t"><b>Apparence</b><small>Thème, lumière, fond d’écran, widgets</small></span><svg class="cat-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></summary>
+      <div class="cat-body">
+        <div class="group">
+          <h3>Thème</h3>
+          <div id="set-theme" class="themes"></div>
+          <div class="row" style="margin-top:14px">
+            <span class="hint" style="margin:0">Appliquer le thème aux pages Google</span>
+            <label class="switch"><input type="checkbox" id="set-google"><span></span></label>
+          </div>
+        </div>
+        <div class="group">
+          <div class="row">
+            <h3>Lumière d’ambiance</h3>
+            <label class="switch"><input type="checkbox" id="set-light-on"><span></span></label>
+          </div>
+          <p class="hint">Un halo de couleur qui se promène doucement sur le fond.</p>
+          <div id="set-light" class="swatches"></div>
+          <label class="slider">Intensité
+            <input type="range" id="set-intensity" min="0.4" max="1.8" step="0.1">
+          </label>
+        </div>
+        <div class="group">
+          <h3>Fond d’écran</h3>
+          <p class="hint">Le fond de la page d’accueil.</p>
+          <div id="set-wall" class="walls"></div>
+          <div class="chips" style="margin-top:12px">
+            <button class="chip" id="wall-img">Image…</button>
+            <button class="chip" id="wall-vid">Vidéo…</button>
+            <input type="file" id="wall-file" hidden>
+          </div>
+          <label class="slider">Assombrir
+            <input type="range" id="set-dim" min="0" max="0.7" step="0.05">
+          </label>
+        </div>
+        <div class="group">
+          <h3>Widgets</h3>
+          <p class="hint">Petites cartes en bas de la page d’accueil.</p>
+          <div class="list" id="set-widgets"></div>
+          <div id="weather-city" class="inline-form" style="margin-top:10px" hidden>
+            <input id="city-input" type="text" spellcheck="false" placeholder="Ville pour la météo (ex. Paris)">
+            <button class="chip sel" id="city-save">OK</button>
+          </div>
+          <p class="hint" id="city-msg" hidden></p>
+        </div>
       </div>
-      <p class="hint" style="margin-top:14px">Mettre en veille les onglets inactifs après :</p>
-      <div id="set-sleep" class="chips"></div>
-    </div>
+    </details>
 
-    <div class="group">
-      <h3>Gestes et raccourcis</h3>
-      <div class="row" style="margin-top:12px">
-        <span class="hint" style="margin:0">Gestes de la souris (clic droit maintenu + glisser)</span>
-        <label class="switch"><input type="checkbox" id="set-gestures"><span></span></label>
+    <details class="cat" data-cat="prod">
+      <summary><span class="cat-ic"><svg viewBox="0 0 24 24"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/></svg></span><span class="cat-t"><b>Productivité</b><small>Mode concentration, profils, économie d’énergie</small></span><svg class="cat-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></summary>
+      <div class="cat-body">
+        <div class="group">
+          <h3>Mode concentration</h3>
+          <p class="hint">Masque les onglets et les favoris, et bloque les sites qui distraient pendant la durée choisie.</p>
+          <div class="chips" id="focus-chips"></div>
+          <p class="hint" style="margin-top:12px">Sites bloqués (un par ligne) :</p>
+          <textarea id="focus-sites" class="area" rows="4" spellcheck="false"></textarea>
+        </div>
+        <div class="group">
+          <h3>Profils</h3>
+          <p class="hint">Chaque profil a ses propres connexions et cookies (perso, travail…). Il s’ouvre dans sa propre fenêtre.</p>
+          <div class="list" id="profiles"></div>
+          <div class="inline-form" style="margin-top:10px">
+            <input id="profile-name" type="text" spellcheck="false" maxlength="30" placeholder="Nouveau profil (ex. Travail)">
+            <button class="chip sel" id="profile-add">Créer</button>
+          </div>
+          <p class="hint" id="profile-msg" hidden></p>
+        </div>
+        <div class="group">
+          <h3>Économie d’énergie</h3>
+          <p class="hint">Animations en pause et onglets inactifs mis en veille plus tôt (10 min).</p>
+          <div class="chips" id="power-chips"></div>
+          <p class="hint" id="power-state" style="margin-top:10px"></p>
+        </div>
       </div>
-      <p class="hint" style="margin-top:6px">← précédent · → suivant · ↑ actualiser · ↓ nouvel onglet · ↓→ fermer · ←↑ rouvrir</p>
-      <p class="hint" style="margin-top:14px">Raccourcis clavier : cliquez sur une touche puis tapez la nouvelle combinaison.</p>
-      <div id="set-keys" class="list"></div>
-    </div>
+    </details>
 
-    <div class="group">
-      <h3>Sauvegarde</h3>
-      <p class="hint" style="margin-top:12px">Favoris, thème, lumières et réglages dans un fichier, à garder ou à importer sur un autre PC.</p>
-      <div class="chips" style="margin-top:12px">
-        <button class="chip" id="backup-export">Exporter</button>
-        <button class="chip" id="backup-import">Importer…</button>
-        <input type="file" id="backup-file" accept=".json,application/json" hidden>
+    <details class="cat" data-cat="data">
+      <summary><span class="cat-ic"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19.5h14"/></svg></span><span class="cat-t"><b>Sauvegarde</b><small>Exporter ou importer vos réglages et favoris</small></span><svg class="cat-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></summary>
+      <div class="cat-body">
+        <div class="group">
+          <h3>Sauvegarde</h3>
+          <p class="hint" style="margin-top:12px">Favoris, thème, lumières et réglages dans un fichier, à garder ou à importer sur un autre PC.</p>
+          <div class="chips" style="margin-top:12px">
+            <button class="chip" id="backup-export">Exporter</button>
+            <button class="chip" id="backup-import">Importer…</button>
+            <input type="file" id="backup-file" accept=".json,application/json" hidden>
+          </div>
+          <p class="hint" id="backup-msg" style="margin-top:10px; display:none"></p>
+        </div>
       </div>
-      <p class="hint" id="backup-msg" style="margin-top:10px; display:none"></p>
-    </div>
+    </details>
 
-    <div class="group">
-      <h3>Thème</h3>
-      <div id="set-theme" class="themes"></div>
-      <div class="row" style="margin-top:14px">
-        <span class="hint" style="margin:0">Appliquer le thème aux pages Google</span>
-        <label class="switch"><input type="checkbox" id="set-google"><span></span></label>
+    <details class="cat" data-cat="about">
+      <summary><span class="cat-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/></svg></span><span class="cat-t"><b>À propos et mises à jour</b><small>Version, mises à jour, démarrage</small></span><svg class="cat-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></summary>
+      <div class="cat-body">
+        <div class="group">
+          <h3>À propos de Corrtex</h3>
+          <p class="hint" id="about-version"></p>
+          <div class="chips" style="margin-top:10px">
+            <button class="chip" id="whatsnew-btn">Nouveautés</button>
+            <button class="chip" id="update-btn">Rechercher des mises à jour</button>
+          </div>
+          <p class="hint" id="update-msg" hidden></p>
+          <div class="chips" style="margin-top:8px" id="update-install-row" hidden>
+            <button class="chip sel" id="update-install">Installer et redémarrer</button>
+          </div>
+          <div class="row" style="margin-top:14px">
+            <span class="hint" style="margin:0">Installer les mises à jour automatiquement au démarrage</span>
+            <label class="switch"><input type="checkbox" id="set-autoupdate"><span></span></label>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <span class="hint" style="margin:0">Garder Corrtex ouvert dans la barre des tâches quand on ferme la fenêtre (réouverture instantanée)</span>
+            <label class="switch"><input type="checkbox" id="set-keeprunning"><span></span></label>
+          </div>
+          <p class="hint" style="margin-top:12px">Corrtex vérifie les nouvelles versions à chaque lancement puis toutes les 6 heures (github.com/Xera-Dev/Corrtex). Pour quitter complètement : Outils › Quitter Corrtex.</p>
+        </div>
       </div>
-    </div>
+    </details>
 
-    <div class="group">
-      <div class="row">
-        <h3>Lumière d’ambiance</h3>
-        <label class="switch"><input type="checkbox" id="set-light-on"><span></span></label>
-      </div>
-      <p class="hint">Un halo de couleur qui se promène doucement sur le fond.</p>
-      <div id="set-light" class="swatches"></div>
-      <label class="slider">Intensité
-        <input type="range" id="set-intensity" min="0.4" max="1.8" step="0.1">
-      </label>
-    </div>
-
-    <div class="group">
-      <h3>Fond d’écran</h3>
-      <p class="hint">Le fond de la page d’accueil.</p>
-      <div id="set-wall" class="walls"></div>
-      <div class="chips" style="margin-top:12px">
-        <button class="chip" id="wall-img">Image…</button>
-        <button class="chip" id="wall-vid">Vidéo…</button>
-        <input type="file" id="wall-file" hidden>
-      </div>
-      <label class="slider">Assombrir
-        <input type="range" id="set-dim" min="0" max="0.7" step="0.05">
-      </label>
-    </div>
-
-    <div class="group">
-      <h3>Widgets</h3>
-      <p class="hint">Petites cartes en bas de la page d’accueil.</p>
-      <div class="list" id="set-widgets"></div>
-      <div id="weather-city" class="inline-form" style="margin-top:10px" hidden>
-        <input id="city-input" type="text" spellcheck="false" placeholder="Ville pour la météo (ex. Paris)">
-        <button class="chip sel" id="city-save">OK</button>
-      </div>
-      <p class="hint" id="city-msg" hidden></p>
-    </div>
-
-    <div class="group">
-      <h3>Mode concentration</h3>
-      <p class="hint">Masque les onglets et les favoris, et bloque les sites qui distraient pendant la durée choisie.</p>
-      <div class="chips" id="focus-chips"></div>
-      <p class="hint" style="margin-top:12px">Sites bloqués (un par ligne) :</p>
-      <textarea id="focus-sites" class="area" rows="4" spellcheck="false"></textarea>
-    </div>
-
-    <div class="group">
-      <h3>Profils</h3>
-      <p class="hint">Chaque profil a ses propres connexions et cookies (perso, travail…). Il s’ouvre dans sa propre fenêtre.</p>
-      <div class="list" id="profiles"></div>
-      <div class="inline-form" style="margin-top:10px">
-        <input id="profile-name" type="text" spellcheck="false" maxlength="30" placeholder="Nouveau profil (ex. Travail)">
-        <button class="chip sel" id="profile-add">Créer</button>
-      </div>
-      <p class="hint" id="profile-msg" hidden></p>
-    </div>
-
-    <div class="group">
-      <h3>Économie d’énergie</h3>
-      <p class="hint">Animations en pause et onglets inactifs mis en veille plus tôt (10 min).</p>
-      <div class="chips" id="power-chips"></div>
-      <p class="hint" id="power-state" style="margin-top:10px"></p>
-    </div>
-
-    <div class="group">
-      <h3>À propos de Corrtex</h3>
-      <p class="hint" id="about-version"></p>
-      <div class="chips" style="margin-top:10px">
-        <button class="chip" id="whatsnew-btn">Nouveautés</button>
-        <button class="chip" id="update-btn">Rechercher des mises à jour</button>
-      </div>
-      <p class="hint" id="update-msg" hidden></p>
-      <div class="chips" style="margin-top:8px" id="update-install-row" hidden>
-        <button class="chip sel" id="update-install">Installer et redémarrer</button>
-      </div>
-      <div class="row" style="margin-top:14px">
-        <span class="hint" style="margin:0">Installer les mises à jour automatiquement au démarrage</span>
-        <label class="switch"><input type="checkbox" id="set-autoupdate"><span></span></label>
-      </div>
-      <div class="row" style="margin-top:12px">
-        <span class="hint" style="margin:0">Garder Corrtex ouvert dans la barre des tâches quand on ferme la fenêtre (réouverture instantanée)</span>
-        <label class="switch"><input type="checkbox" id="set-keeprunning"><span></span></label>
-      </div>
-      <p class="hint" style="margin-top:12px">Corrtex vérifie les nouvelles versions à chaque lancement puis toutes les 6 heures (github.com/Xera-Dev/Corrtex). Pour quitter complètement : Outils › Quitter Corrtex.</p>
-    </div>
   </section>
 
   <script src="ext-ui.js"></script>

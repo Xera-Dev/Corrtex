@@ -290,6 +290,46 @@ struct Settings {
     /// fermer la dernière fenêtre la réduit dans la barre des tâches (réouverture instantanée)
     #[serde(default = "yes")]
     keep_running: bool,
+    /// boutiques que l'agent de recherche d'achat peut visiter en plus de leDénicheur
+    #[serde(default = "default_shop_sites")]
+    shop_sites: Vec<ShopSite>,
+}
+
+/// Boutique visitée par l'agent d'achat : `search` est l'adresse de recherche, {q} y est remplacé par la recherche.
+#[derive(Serialize, Deserialize, Clone)]
+struct ShopSite {
+    name: String,
+    search: String,
+    #[serde(default)]
+    on: bool,
+}
+
+fn default_shop_sites() -> Vec<ShopSite> {
+    [
+        ("Amazon", "https://www.amazon.fr/s?k={q}"),
+        ("Fnac", "https://www.fnac.com/SearchResult/ResultList.aspx?Search={q}"),
+        ("Darty", "https://www.darty.com/nav/recherche?text={q}"),
+        ("Boulanger", "https://www.boulanger.com/resultats?tr={q}"),
+        ("Cdiscount", "https://www.cdiscount.com/search/10/{q}.html"),
+        ("Rakuten", "https://fr.shopping.rakuten.com/search/{q}"),
+        ("Back Market", "https://www.backmarket.fr/fr-fr/search?q={q}"),
+        ("LDLC", "https://www.ldlc.com/recherche/{q}/"),
+        ("Decathlon", "https://www.decathlon.fr/search?Ntt={q}"),
+        ("idealo", "https://www.idealo.fr/prechcat.html?q={q}"),
+    ]
+    .iter()
+    .map(|(n, u)| ShopSite { name: n.to_string(), search: u.to_string(), on: false })
+    .collect()
+}
+
+/// Domaine d'une adresse de recherche de boutique (sans « www. »).
+fn shop_site_host(search: &str) -> Option<String> {
+    let u = tauri::Url::parse(&search.replace("{q}", "x")).ok()?;
+    if u.scheme() != "https" {
+        return None;
+    }
+    let h = u.host_str()?.to_lowercase();
+    Some(h.strip_prefix("www.").unwrap_or(&h).to_string())
 }
 
 fn default_focus_sites() -> Vec<String> {
@@ -333,7 +373,7 @@ fn default_side_w() -> f64 {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { ai_provider: "claude".into(), sidebar_open: false, ai_skin: true, sidebar_w: 400.0, ai_memory: true, ai_chats: HashMap::new(), restore_session: true, sleep_min: 30, zooms: HashMap::new(), save_history: true, notes: HashMap::new(), read_later: Vec::new(), keys: HashMap::new(), gestures: true, focus_sites: default_focus_sites(), update_repo: String::new(), last_version: String::new(), profiles: Vec::new(), power_mode: default_power(), auto_update: true, keep_running: true }
+        Settings { ai_provider: "claude".into(), sidebar_open: false, ai_skin: true, sidebar_w: 400.0, ai_memory: true, ai_chats: HashMap::new(), restore_session: true, sleep_min: 30, zooms: HashMap::new(), save_history: true, notes: HashMap::new(), read_later: Vec::new(), keys: HashMap::new(), gestures: true, focus_sites: default_focus_sites(), update_repo: String::new(), last_version: String::new(), profiles: Vec::new(), power_mode: default_power(), auto_update: true, keep_running: true, shop_sites: default_shop_sites() }
     }
 }
 
@@ -2008,10 +2048,14 @@ async fn shop_context(app: AppHandle, webview: Webview) -> serde_json::Value {
 
 /// Télécharge une page d'un comparateur (leDénicheur) ou d'un site de codes promo (Dealabs) ;
 /// l'analyse se fait dans le panneau. Seuls ces sites sont autorisés.
-fn fetch_shop_page(url: &str) -> Result<String, String> {
+fn fetch_shop_page(url: &str, extra: &[String]) -> Result<String, String> {
     let u = tauri::Url::parse(url).map_err(|_| "adresse invalide")?;
-    let host = u.host_str().unwrap_or("");
-    if u.scheme() != "https" || !matches!(host, "ledenicheur.fr" | "www.ledenicheur.fr" | "www.dealabs.com" | "dealabs.com") {
+    let host = u.host_str().unwrap_or("").to_lowercase();
+    let bare = host.strip_prefix("www.").unwrap_or(&host).to_string();
+    let base = matches!(host.as_str(), "ledenicheur.fr" | "www.ledenicheur.fr" | "www.dealabs.com" | "dealabs.com");
+    // boutiques activées dans les réglages (domaine exact ou sous-domaine)
+    let allowed = base || extra.iter().any(|h| bare == *h || bare.ends_with(&format!(".{h}")));
+    if u.scheme() != "https" || !allowed {
         return Err("site non autorisé".into());
     }
     {
@@ -2046,8 +2090,43 @@ fn fetch_shop_page(url: &str) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn shop_fetch(url: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || fetch_shop_page(&url)).await.map_err(|e| e.to_string())?
+async fn shop_fetch(app: AppHandle, url: String) -> Result<String, String> {
+    let extra: Vec<String> = state(&app).settings.shop_sites.iter().filter(|s| s.on).filter_map(|s| shop_site_host(&s.search)).collect();
+    tauri::async_runtime::spawn_blocking(move || fetch_shop_page(&url, &extra)).await.map_err(|e| e.to_string())?
+}
+
+/// Boutiques de l'agent d'achat (réglages).
+#[tauri::command]
+async fn shop_sites_get(app: AppHandle) -> Vec<ShopSite> {
+    state(&app).settings.shop_sites.clone()
+}
+
+#[tauri::command]
+async fn shop_sites_set(app: AppHandle, sites: Vec<ShopSite>) -> Result<Vec<ShopSite>, String> {
+    let mut clean: Vec<ShopSite> = Vec::new();
+    for s in sites.into_iter().take(30) {
+        let name: String = s.name.trim().chars().take(40).collect();
+        let search: String = s.search.trim().chars().take(400).collect();
+        if name.is_empty() || !search.contains("{q}") || shop_site_host(&search).is_none() {
+            continue;
+        }
+        if clean.iter().any(|c| c.search == search) {
+            continue;
+        }
+        clean.push(ShopSite { name, search, on: s.on });
+    }
+    state(&app).settings.shop_sites = clean.clone();
+    save_settings(&app);
+    Ok(clean)
+}
+
+/// Remet la liste des boutiques proposées par défaut (toutes désactivées).
+#[tauri::command]
+async fn shop_sites_reset(app: AppHandle) -> Vec<ShopSite> {
+    let list = default_shop_sites();
+    state(&app).settings.shop_sites = list.clone();
+    save_settings(&app);
+    list
 }
 
 /// Comparateur : « Demander conseil à l'IA » envoie les données trouvées au panneau IA.
@@ -6248,7 +6327,7 @@ async fn tab_event(app: AppHandle, webview: Webview, kind: String, data: serde_j
             let url = data.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
             let wv = webview.clone();
             tauri::async_runtime::spawn_blocking(move || {
-                let (ok, body) = match fetch_shop_page(&url) {
+                let (ok, body) = match fetch_shop_page(&url, &[]) {
                     Ok(t) => (true, t),
                     Err(e) => (false, e),
                 };
@@ -6634,6 +6713,9 @@ fn main() {
             toggle_fullscreen,
             ai_summarize,
             ai_page_compare,
+            shop_sites_get,
+            shop_sites_set,
+            shop_sites_reset,
             ai_compare,
             set_aibar_extra,
             set_ai_memory,

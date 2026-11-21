@@ -410,6 +410,67 @@
     t.hidden = false;
   }
 
+
+  // ---------------------------------------------------------------- réglages : catégories dépliables (état gardé)
+  (function () {
+    let open = null;
+    try { open = JSON.parse(localStorage.getItem('corrtex-set-cats') || 'null'); } catch (e) {}
+    const cats = document.querySelectorAll('#settings details.cat');
+    cats.forEach((d) => {
+      d.open = open ? open.indexOf(d.dataset.cat) >= 0 : d.dataset.cat === 'ia';
+      d.addEventListener('toggle', () => {
+        const ids = [...cats].filter((x) => x.open).map((x) => x.dataset.cat);
+        try { localStorage.setItem('corrtex-set-cats', JSON.stringify(ids)); } catch (e) {}
+      });
+    });
+  })();
+
+  // ---------------------------------------------------------------- boutiques de l'agent d'achat
+  let shopSites = [];
+  const shopHost = (u) => { try { return new URL(u.replace('{q}', 'x')).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
+  function shopMsg(t) { const m = $('shop-msg'); m.hidden = !t; m.textContent = t || ''; }
+  async function saveShops(list) {
+    try { shopSites = await C.invoke('shop_sites_set', { sites: list }); } catch (e) { shopMsg(String(e)); }
+    renderShops();
+  }
+  function renderShops() {
+    const box = $('shop-sites');
+    box.replaceChildren();
+    for (const site of shopSites) {
+      const r = el('div', 'row-link keyrow shop-row');
+      r.append(el('span', '', site.name), el('span', 'host', shopHost(site.search)));
+      const sw = el('label', 'switch');
+      const inp = document.createElement('input');
+      inp.type = 'checkbox';
+      inp.checked = !!site.on;
+      inp.onchange = () => saveShops(shopSites.map((x) => (x === site ? Object.assign({}, x, { on: inp.checked }) : x)));
+      sw.append(inp, el('span'));
+      const del = el('button', 'kreset', '×');
+      del.title = 'Retirer cette boutique';
+      del.onclick = () => saveShops(shopSites.filter((x) => x !== site));
+      r.append(sw, del);
+      box.append(r);
+    }
+    if (!shopSites.length) box.append(el('p', 'hint', 'Aucune boutique : seul leDénicheur est utilisé.'));
+  }
+  async function loadShops() { shopSites = (await C.invoke('shop_sites_get').catch(() => [])) || []; renderShops(); }
+  $('shop-add').onclick = () => {
+    const name = $('shop-name').value.trim();
+    let url = $('shop-url').value.trim();
+    if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+    url = url.replace(/^http:/i, 'https:');
+    // le mot recherché (TEST) devient l'emplacement de la recherche
+    if (url.indexOf('{q}') < 0) url = url.replace(/test/i, '{q}');
+    if (!name) return shopMsg('Donnez un nom à la boutique.');
+    if (url.indexOf('{q}') < 0 || !shopHost(url)) return shopMsg('Adresse non reconnue : faites une recherche du mot TEST sur le site et collez l’adresse de la page de résultats.');
+    if (shopSites.some((x) => x.search === url)) return shopMsg('Cette boutique est déjà dans la liste.');
+    shopMsg('');
+    $('shop-name').value = ''; $('shop-url').value = '';
+    saveShops(shopSites.concat([{ name, search: url, on: true }]));
+  };
+  $('shop-url').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('shop-add').click(); });
+  $('shop-reset').onclick = async () => { shopSites = (await C.invoke('shop_sites_reset').catch(() => shopSites)) || []; shopMsg(''); renderShops(); };
+
   // ---------------------------------------------------------------- démarrage (les réglages lourds attendent l'ouverture du panneau)
   applyWall();
   renderWidgets();
@@ -419,7 +480,7 @@
   new MutationObserver(() => {
     if (!settings.classList.contains('open') || settingsReady) return;
     settingsReady = true;
-    renderWallSettings(); renderWidgetSettings(); renderFocus(); renderProfiles();
+    renderWallSettings(); renderWidgetSettings(); renderFocus(); renderProfiles(); loadShops();
   }).observe(settings, { attributes: true, attributeFilter: ['class'] });
   renderAbout().then((i) => {
     if (!i) return;
