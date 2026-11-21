@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-shop-ai-warm"
+description = "Enables the shop_ai_warm command without any pre-configured scope."
+commands.allow = ["shop_ai_warm"]
+
+[[permission]]
+identifier = "deny-shop-ai-warm"
+description = "Denies the shop_ai_warm command without any pre-configured scope."
+commands.deny = ["shop_ai_warm"]

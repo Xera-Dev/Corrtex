@@ -255,3 +255,20 @@ pub async fn search_warm() {
         });
     }
 }
+
+/// Page d'un site de shopping (comparateur, boutique) par le client rapide : connexions gardées
+/// ouvertes, pages gardées 10 minutes. L'adresse a déjà été vérifiée par l'appelant.
+pub async fn shop_get(url: String) -> Result<String, String> {
+    cached(format!("shop\u{1}{url}"), || async move {
+        let r = client().get(&url).send().await.map_err(|e| if e.is_timeout() { "délai dépassé".to_string() } else { "site injoignable".to_string() })?;
+        let code = r.status().as_u16();
+        if code == 404 {
+            return Err("introuvable".into());
+        }
+        if !(200..300).contains(&code) {
+            return Err(format!("le site a refusé la demande ({code})"));
+        }
+        r.text().await.map_err(|_| "réponse coupée".to_string())
+    })
+    .await
+}

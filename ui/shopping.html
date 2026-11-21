@@ -30,11 +30,23 @@
         if (error && !w.text) w.reject('pas de réponse de l’IA'); else w.resolve(w.text);
       }
     };
-    function ask(prompt) {
+    // slot : session d'IA cachée à utiliser (1 et 2 : deux sessions qui travaillent en même temps)
+    function ask(prompt, slot, ms) {
       return new Promise((resolve, reject) => {
         const req = 'sp' + Date.now().toString(36) + (++aiSeq);
-        aiWait[req] = { resolve, reject, text: '', timer: setTimeout(() => { delete aiWait[req]; reject('délai dépassé'); }, 100000) };
-        C.invoke('shop_ask_ai', { prompt, req }).catch((e) => { delete aiWait[req]; reject(String(e)); });
+        aiWait[req] = { resolve, reject, text: '', timer: setTimeout(() => { delete aiWait[req]; reject('délai dépassé'); }, ms || 60000) };
+        C.invoke('shop_ask_ai', { prompt, req, slot: slot || 1 }).catch((e) => { delete aiWait[req]; reject(String(e)); });
+      });
+    }
+    // même question à plusieurs sessions : la première réponse valide l'emporte
+    function askFirst(prompt, slots, ms, valid) {
+      return new Promise((resolve, reject) => {
+        let left = slots.length, done = false;
+        slots.forEach((sl) => ask(prompt, sl, ms).then((t) => {
+          const v = json(t);
+          if (!done && v && (!valid || valid(v))) { done = true; resolve(v); }
+          else if (--left === 0 && !done) reject('réponse illisible');
+        }).catch((e) => { if (--left === 0 && !done) reject(e); }));
       });
     }
     // premier objet JSON de la réponse (l'IA ajoute parfois du texte ou des balises de code)
@@ -64,7 +76,9 @@
       return {
         hid: job.hid, goal: job.goal, summary: P.summary || '', tags, busy, steps,
         suggestions: job.suggestions || [],
-        rounds: job.rounds.map((r) => ({ title: r.title, advice: r.advice || '', empty: !!r.empty, items: r.picks.map((p) => item(p)).filter(Boolean) })),
+        rounds: job.rounds.map((r) => ({ title: r.title, advice: r.advice || '', empty: !!r.empty, provisional: !!r.provisional, items: r.picks.map((p) => item(p)).filter(Boolean) })),
+        // tous les articles suivis (pour trier par prix, correspondance, note…)
+        all: Object.values(job.cands).filter((c) => c.enriched && prescore(c) >= 0).map((c) => item({ id: c.id })).filter(Boolean).slice(0, 40),
       };
     }
     function item(p) {
@@ -73,7 +87,8 @@
       const best = c.offers && c.offers[0];
       return { id: c.id, name: c.name, image: c.image || '', url: c.ext ? 'https://ledenicheur.fr/search?query=' + encodeURIComponent(c.name) : c.url, price: best ? best.price : c.low != null ? c.low : c.price,
         shop: best ? best.shop : '', stock: best ? !!best.stock : false, offer: best ? best.url : '', rating: c.rating || null, reviews: c.reviews || 0,
-        offers: c.offerCount || 0, trend: c.trend || null, why: p.why || '', timing: p.timing || 'ok' };
+        offers: c.offerCount || 0, trend: c.trend || null, why: p.why || '', timing: p.timing || (c.trend && c.trend.atLow ? 'buy' : 'ok'),
+        match: matchOf(c) };
     }
     let pushT = 0;
     function publish(now) {
@@ -106,6 +121,22 @@
       };
     }
 
+    // correspondance avec la demande, de 0 à 100 (pour le tri)
+    function matchOf(c) {
+      const text = job.goal + ' ' + job.refinements.join(' ') + ' ' + ((job.plan && job.plan.must) || []).join(' ');
+      return Math.max(0, Math.min(100, Math.round(Math.max(S.score(text, c.name), S.score(c.q || '', c.name)) * 100)));
+    }
+    // recherche directe tirée de la demande (part tout de suite, sans attendre l'IA)
+    function quickQuery() {
+      const q = job.goal.replace(/(trouve[sz]?(-moi)?|trouver|cherche[sz]?|chercher|je veux|j'aimerais|j’aimerais|je voudrais|recherche|quel(le)?s? (est|sont)|le meilleur|la meilleure|les meilleur(e)?s|meilleur(e)?s?|pas cher|bon marché|à moins de|moins de|max(imum)?|jusqu'à|jusqu’à|budget|environ|pour moi)/gi, ' ')
+        .replace(/\d+\s*(€|euros?)/gi, ' ').replace(/\b(un|une|des|le|la|les|de|du|à|a|pour|avec|et)\b/gi, ' ').replace(/[?!.,]/g, ' ').replace(/\s+/g, ' ').trim();
+      return q || job.goal;
+    }
+    function quickBudget() {
+      const m = job.goal.match(/(?:moins de|max(?:imum)?|jusqu'à|jusqu’à|budget(?: de)?|<)\s*(\d+(?:[.,]\d+)?)\s*(?:€|euros?)?/i) || job.goal.match(/(\d+)\s*(?:€|euros?)/i);
+      return m ? parseFloat(m[1].replace(',', '.')) : null;
+    }
+
     // 1. la demande devient des recherches précises pour le comparateur
     async function plan(more) {
       const st = step(more ? 'L’IA cherche d’autres pistes…' : 'L’IA analyse la demande…');
@@ -116,7 +147,8 @@
         '{"summary":"la demande reformulée en une phrase courte","queries":["3 ou 4 recherches courtes pour le comparateur de prix leDénicheur : de préférence des modèles précis (marque + modèle) réputés pour cette demande, sinon la catégorie avec ses caractéristiques clés"],"budget_min":null,"budget_max":null,"must":["caractéristiques indispensables, en quelques mots"],"avoid":["mots qui signalent un mauvais résultat, par ex. accessoires"]}\n' +
         'budget_min et budget_max sont des nombres en euros, ou null s’ils ne sont pas donnés.';
       let p = null;
-      try { p = json(await ask(prompt)); } catch (e) {}
+      // 30 s au plus : la recherche directe a déjà commencé en parallèle
+      try { p = json(await ask(prompt, 1, 30000)); } catch (e) {}
       if (!p || !Array.isArray(p.queries) || !p.queries.length) {
         // sans réponse de l'IA : la demande elle-même, débarrassée des mots inutiles
         const q = job.goal.replace(/\b(trouve|trouver|cherche|chercher|moi|je|un|une|des|le|la|les|meilleur|meilleure|pas cher|moins de|à|a|pour|acheter)\b/gi, ' ').replace(/\d+\s*(€|euros?)/gi, ' ').replace(/\s+/g, ' ').trim();
@@ -133,7 +165,13 @@
 
     // 2. recherches sur le comparateur
     async function search(queries) {
-      for (const q of queries) {
+      queries = queries.filter((q) => job.queriesDone.indexOf(q) < 0);
+      job.queriesDone.push(...queries);
+      // toutes les recherches en même temps (et les boutiques des réglages avec)
+      await Promise.all([Promise.all(queries.map(searchOne)), searchShops(queries)]);
+    }
+    async function searchOne(q) {
+      {
         const st = step('Recherche « ' + q + ' » sur leDénicheur…');
         try {
           const list = S.parseSearch(await fetchPage('https://ledenicheur.fr/search?query=' + encodeURIComponent(q)));
@@ -146,9 +184,7 @@
           });
           st.ok('« ' + q + ' » : ' + list.length + ' produit' + (list.length > 1 ? 's' : '') + (n < list.length ? ' (' + n + ' nouveaux)' : ''));
         } catch (e) { st.fail('« ' + q + ' » : ' + e); }
-        job.queriesDone.push(q);
       }
-      await searchShops(queries);
     }
 
     // 2 bis. boutiques ajoutées dans les réglages : les deux premières recherches sur chacune
@@ -175,7 +211,7 @@
           else st.fail(site.name + ' · « ' + q + ' » : aucun article lisible (la page se construit peut-être en JavaScript)');
         } catch (e) { st.fail(site.name + ' · « ' + q + ' » : ' + e); }
       };
-      await Promise.all([0, 1, 2].map(async () => { while (tasks.length) { const t = tasks.shift(); await one(t[0], t[1]); } }));
+      await Promise.all([0, 1, 2, 3].map(async () => { while (tasks.length) { const t = tasks.shift(); await one(t[0], t[1]); } }));
     }
 
     // accessoires (pas les mots « pour », « compatible »… trop courants dans les noms de produits)
@@ -232,7 +268,8 @@
         st.ok('Suivi des prix : ' + (++done) + ' / ' + list.length);
       };
       const queue = list.slice();
-      await Promise.all([0, 1, 2].map(async () => { while (queue.length) await one(queue.shift()); }));
+      // six pages à la fois (connexions gardées ouvertes côté Corrtex)
+      await Promise.all([0, 1, 2, 3, 4, 5].map(async () => { while (queue.length) await one(queue.shift()); }));
       st.ok('Prix suivis sur ' + list.length + ' article' + (list.length > 1 ? 's' : ''));
     }
 
@@ -256,7 +293,8 @@
         'Réponds UNIQUEMENT par un objet JSON, sans aucun texte autour :\n' +
         '{"picks":[{"n":0,"why":"pourquoi cet article, en une ou deux phrases concrètes","timing":"buy | wait | ok"}],"advice":"conseil d’ensemble en deux phrases au plus","refine":["2 à 4 précisions utiles que l’utilisateur pourrait donner, formulées comme des choix très courts, par ex. « Plutôt intra-auriculaire »"],"next":["2 ou 3 nouvelles recherches pour continuer"]}';
       let r = null;
-      try { r = json(await ask(prompt)); } catch (e) {}
+      // deux sessions d'IA en même temps : la première réponse valide l'emporte
+      try { r = await askFirst(prompt, [2, 1], 55000, (v) => Array.isArray(v.picks)); } catch (e) {}
       if (!r || !Array.isArray(r.picks)) {
         const sorted = list.slice().sort((a, b) => prescore(b) + (b.trend && b.trend.atLow ? 0.3 : 0) - prescore(a) - (a.trend && a.trend.atLow ? 0.3 : 0));
         r = { picks: sorted.slice(0, 5).map((c) => ({ n: list.indexOf(c), why: '', timing: c.trend && c.trend.atLow ? 'buy' : 'ok' })), advice: '', refine: [], next: [] };
@@ -270,6 +308,12 @@
       return { picks: picks.slice(0, 5), advice: String(r.advice || ''), refine: arr(r.refine).slice(0, 4), next: arr(r.next).slice(0, 3) };
     }
 
+    // classement local immédiat (correspondance, notes, prix au plus bas), en attendant l'IA
+    function localRank(list) {
+      return list.slice().sort((a, b) => (prescore(b) + (b.trend && b.trend.atLow ? 0.3 : 0)) - (prescore(a) + (a.trend && a.trend.atLow ? 0.3 : 0)))
+        .slice(0, 5).map((c) => ({ id: c.id, why: '', timing: c.trend && c.trend.atLow ? 'buy' : 'ok' }));
+    }
+
     const shownIds = () => job.rounds.reduce((a, r) => a.concat(r.picks.map((p) => p.id)), []);
     const shownNames = () => shownIds().map((id) => job.cands[id] && job.cands[id].name).filter(Boolean).slice(0, 20);
 
@@ -280,10 +324,17 @@
       steps = [];
       if (mode === 'new') job.rounds = [];
       publish(true);
+      // sessions d'IA ouvertes à l'avance (l'analyse et le classement n'attendent pas le chargement)
+      C.invoke('shop_ai_warm', { slots: [1, 2] }).catch(() => {});
       try {
         let queries = mode === 'more' && job.next && job.next.length ? job.next.filter((q) => job.queriesDone.indexOf(q) < 0) : [];
-        if (!queries.length) queries = await plan(mode === 'more');
-        await search(queries);
+        if (queries.length) await search(queries);
+        else {
+          // la recherche directe part tout de suite ; l'analyse de l'IA ajoute ses recherches dès qu'elle arrive
+          if (mode === 'new' && !job.plan) job.plan = { summary: '', budget_min: null, budget_max: quickBudget(), must: [], avoid: [] };
+          const direct = mode === 'new' && !job.refinements.length ? search([quickQuery()]) : Promise.resolve();
+          await Promise.all([direct, plan(mode === 'more').then((q) => search(q))]);
+        }
         // tous les articles connus (les précisions réutilisent ceux déjà trouvés), hors déjà proposés si on continue
         const skip = mode === 'more' ? shownIds() : [];
         let pool = Object.values(job.cands).filter((c) => skip.indexOf(c.id) < 0).map((c) => [prescore(c), c]).filter((x) => x[0] >= 0);
@@ -295,8 +346,13 @@
         } else {
           const need = pool.filter((c) => !c.enriched);
           if (need.length) await enrich(need);
+          const title = mode === 'more' ? 'Autres articles' : job.refinements.length ? 'Meilleurs articles après précision' : 'Meilleurs articles';
+          // résultats affichés tout de suite (classement local), puis remplacés par le choix de l'IA
+          const prov = { title, picks: localRank(pool), advice: 'Classement provisoire : l’IA affine la sélection…', provisional: true };
+          job.rounds.push(prov);
+          publish(true);
           const r = await rank(pool);
-          job.rounds.push({ title: mode === 'more' ? 'Autres articles' : job.refinements.length ? 'Meilleurs articles après précision' : 'Meilleurs articles', picks: r.picks, advice: r.advice });
+          job.rounds[job.rounds.indexOf(prov)] = { title, picks: r.picks, advice: r.advice };
           job.suggestions = r.refine;
           job.next = r.next;
         }

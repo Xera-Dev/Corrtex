@@ -874,8 +874,10 @@ fn layout_with(app: &AppHandle, win: &str, width: f64, height: f64) {
     }
 
     // page d'IA cachée (réponses rapides) : toujours hors de la fenêtre
-    if let Some(q) = app.get_webview(&format!("aiq-{win}")) {
-        set_bounds(&q, LogicalPosition::new(width + 200.0, 0.0), LogicalSize::new(420.0, 820.0));
+    for key in [win.to_string(), format!("{win}_s1"), format!("{win}_s2"), format!("{win}_s3")] {
+        if let Some(q) = app.get_webview(&format!("aiq-{key}")) {
+            set_bounds(&q, LogicalPosition::new(width + 200.0, 0.0), LogicalSize::new(420.0, 820.0));
+        }
     }
     // moteur de la recherche d'achat : hors de la fenêtre lui aussi
     if let Some(q) = app.get_webview(&format!("shopw-{win}")) {
@@ -2076,6 +2078,19 @@ async fn shop_context(app: AppHandle, webview: Webview) -> serde_json::Value {
 
 /// Télécharge une page d'un comparateur (leDénicheur) ou d'un site de codes promo (Dealabs) ;
 /// l'analyse se fait dans le panneau. Seuls ces sites sont autorisés.
+/// Adresse autorisée pour l'agent d'achat : comparateur, Dealabs, ou boutique activée dans les réglages.
+fn shop_url_allowed(url: &str, extra: &[String]) -> Result<(), String> {
+    let u = tauri::Url::parse(url).map_err(|_| "adresse invalide")?;
+    let host = u.host_str().unwrap_or("").to_lowercase();
+    let bare = host.strip_prefix("www.").unwrap_or(&host).to_string();
+    let base = matches!(host.as_str(), "ledenicheur.fr" | "www.ledenicheur.fr" | "www.dealabs.com" | "dealabs.com");
+    let allowed = base || extra.iter().any(|h| bare == *h || bare.ends_with(&format!(".{h}")));
+    if u.scheme() != "https" || !allowed {
+        return Err("site non autorisé".into());
+    }
+    Ok(())
+}
+
 fn fetch_shop_page(url: &str, extra: &[String]) -> Result<String, String> {
     let u = tauri::Url::parse(url).map_err(|_| "adresse invalide")?;
     let host = u.host_str().unwrap_or("").to_lowercase();
@@ -2120,7 +2135,15 @@ fn fetch_shop_page(url: &str, extra: &[String]) -> Result<String, String> {
 #[tauri::command]
 async fn shop_fetch(app: AppHandle, url: String) -> Result<String, String> {
     let extra: Vec<String> = state(&app).settings.shop_sites.iter().filter(|s| s.on).filter_map(|s| shop_site_host(&s.search)).collect();
-    tauri::async_runtime::spawn_blocking(move || fetch_shop_page(&url, &extra)).await.map_err(|e| e.to_string())?
+    shop_url_allowed(&url, &extra)?;
+    // client rapide (connexions ouvertes, cache) ; curl en secours si le site le refuse
+    match search::shop_get(url.clone()).await {
+        Ok(t) => Ok(t),
+        Err(e) if e.contains("refusé") || e.contains("injoignable") => {
+            tauri::async_runtime::spawn_blocking(move || fetch_shop_page(&url, &extra)).await.map_err(|e| e.to_string())?
+        }
+        Err(e) => Err(e),
+    }
 }
 
 /// Envoie une demande au panneau IA (l'ouvre s'il est fermé), par ex. « génère une image ».
@@ -2178,16 +2201,29 @@ async fn shop_sites_reset(app: AppHandle) -> Vec<ShopSite> {
 
 /// Comparateur : « Demander conseil à l'IA » envoie les données trouvées au panneau IA.
 #[tauri::command]
-async fn shop_ask_ai(app: AppHandle, webview: Webview, prompt: String, req: String) -> Result<(), String> {
-    // réponse affichée dans le panneau, par la page d'IA cachée (sans ouvrir le panneau IA)
+async fn shop_ask_ai(app: AppHandle, webview: Webview, prompt: String, req: String, slot: Option<u8>) -> Result<(), String> {
+    // réponse affichée dans le panneau, par la page d'IA cachée (sans ouvrir le panneau IA) ;
+    // « slot » : session d'IA à utiliser (plusieurs questions en parallèle)
     let win = caller_win(&webview);
+    let slot = slot.unwrap_or(0).min(3);
     let tab = state(&app).windows.get(&win).and_then(|w| w.active).unwrap_or(0);
     let req: String = req.chars().filter(|c| c.is_ascii_alphanumeric()).take(30).collect();
-    quick_ask_to(&app, &win, tab, req, prompt.chars().take(12000).collect(), Some("__corrtexShopAI"))?;
-    if let Some(q) = state(&app).quick.get_mut(&win) {
+    let key = quick_key(&win, slot);
+    // la réponse doit aller à cette vue même si la page d'IA répond très vite
+    quick_ask_slot(&app, &win, slot, tab, req, prompt.chars().take(12000).collect(), Some("__corrtexShopAI"))?;
+    if let Some(q) = state(&app).quick.get_mut(&key) {
         q.view = Some(webview.label().to_string());
     }
     Ok(())
+}
+
+/// Prépare des sessions d'IA cachées (discussion vierge chargée) avant d'en avoir besoin.
+#[tauri::command]
+async fn shop_ai_warm(app: AppHandle, webview: Webview, slots: Vec<u8>) {
+    let win = caller_win(&webview);
+    for s in slots.into_iter().take(3) {
+        let _ = quick_warm(&app, &win, s.clamp(1, 3));
+    }
 }
 
 /// Ferme le panneau ouvert par-dessus la page (extensions ou outils).
@@ -3903,15 +3939,37 @@ fn quick_ask(app: &AppHandle, win: &str, tab: u32, bubble: String, prompt: Strin
 
 /// Même chose, la réponse étant remise à une fonction précise de la page (`cb`).
 fn quick_ask_to(app: &AppHandle, win: &str, tab: u32, bubble: String, prompt: String, cb: Option<&'static str>) -> Result<(), String> {
-    let req = {
-        let mut b = state(app);
-        b.next_req += 1;
-        let req = b.next_req;
-        b.quick.insert(win.to_string(), QuickReq { req, tab, bubble, prompt, started: false, cb, view: None });
-        req
-    };
+    quick_ask_slot(app, win, 0, tab, bubble, prompt, cb)
+}
+
+/// Clé d'une session d'IA cachée : la fenêtre, plus le numéro de session (0 = la session habituelle).
+/// Plusieurs sessions travaillent en même temps (recherche d'achat : analyse et classement en parallèle).
+fn quick_key(win: &str, slot: u8) -> String {
+    if slot == 0 { win.to_string() } else { format!("{win}_s{slot}") }
+}
+
+/// Sessions d'IA déjà chargées sur une discussion vierge, prêtes à recevoir une question.
+fn quick_fresh() -> &'static Mutex<std::collections::HashSet<String>> {
+    static M: std::sync::OnceLock<Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    M.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+}
+
+/// Ouvre une session d'IA cachée à l'avance (discussion vierge), pour qu'elle réponde sans attendre.
+fn quick_warm(app: &AppHandle, win: &str, slot: u8) -> Result<(), String> {
+    let key = quick_key(win, slot);
+    if app.get_webview(&format!("aiq-{key}")).is_some() && quick_fresh().lock().unwrap_or_else(|e| e.into_inner()).contains(&key) {
+        return Ok(());
+    }
+    if state(app).quick.contains_key(&key) {
+        return Ok(());
+    }
+    quick_open(app, win, &key)
+}
+
+fn quick_open(app: &AppHandle, win: &str, key: &str) -> Result<(), String> {
+    quick_fresh().lock().unwrap_or_else(|e| e.into_inner()).remove(key);
     let url = provider(&state(app).settings.ai_provider).url;
-    let label = format!("aiq-{win}");
+    let label = format!("aiq-{key}");
     match app.get_webview(&label) {
         // nouvelle discussion à chaque question
         Some(q) => {
@@ -3939,9 +3997,27 @@ fn quick_ask_to(app: &AppHandle, win: &str, tab: u32, bubble: String, prompt: St
                 .map_err(|e| e.to_string())?;
         }
     }
+    Ok(())
+}
+
+fn quick_ask_slot(app: &AppHandle, win: &str, slot: u8, tab: u32, bubble: String, prompt: String, cb: Option<&'static str>) -> Result<(), String> {
+    let key = quick_key(win, slot);
+    let req = {
+        let mut b = state(app);
+        b.next_req += 1;
+        let req = b.next_req;
+        b.quick.insert(key.clone(), QuickReq { req, tab, bubble, prompt, started: false, cb, view: None });
+        req
+    };
+    // session déjà prête (discussion vierge chargée) : la question part tout de suite
+    let fresh = quick_fresh().lock().unwrap_or_else(|e| e.into_inner()).remove(&key);
+    match app.get_webview(&format!("aiq-{key}")) {
+        Some(wv) if fresh => quick_page_loaded(app, &wv),
+        _ => quick_open(app, win, &key)?,
+    }
     // pas de réponse au bout de 75 s : la bulle propose d'ouvrir le panneau
     let app2 = app.clone();
-    let win2 = win.to_string();
+    let win2 = key.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(75));
         let left = {
@@ -3971,7 +4047,13 @@ fn quick_page_loaded(app: &AppHandle, wv: &Webview) {
             _ => None,
         }
     };
-    let Some(q) = job else { return };
+    // pas de question en attente : session préchargée, prête pour la prochaine
+    let Some(q) = job else {
+        if !state(app).quick.contains_key(&win) {
+            quick_fresh().lock().unwrap_or_else(|e| e.into_inner()).insert(win);
+        }
+        return;
+    };
     let wv = wv.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(1200));
@@ -7033,6 +7115,7 @@ fn main() {
             ai_prompt,
             ai_image,
             agent_kind,
+            shop_ai_warm,
             ai_image_result,
             shop_sites_set,
             shop_sites_reset,

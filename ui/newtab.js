@@ -150,6 +150,7 @@
     thread.scrollTop = 0;
     if (kind === 'shopping') {
       setMode('Recherche d’achat');
+      shopSort = 'reco';
       shopEl = aEl;
       aEl.innerHTML = '<div class="ai-wait"><i></i><i></i><i></i></div>';
       sbox.classList.add('thinking');
@@ -266,10 +267,22 @@
     const badge = it.timing === 'buy' ? '<em class="good">Bon moment pour acheter</em>' : it.timing === 'wait' ? '<em class="warn">Prix au-dessus de sa moyenne</em>' : '';
     return '<div class="si"><i class="n">' + n + '</i>' + (it.image ? '<img alt="" loading="lazy" src="' + esc(it.image) + '" onerror="this.style.visibility=\'hidden\'">' : '<div class="noimg"></div>') +
       '<div class="sb"><div class="sn">' + esc(it.name) + '</div>' +
-      '<div class="sm"><b>' + esc(eur(it.price)) + '</b>' + (it.shop ? ' chez ' + esc(it.shop) : '') + (it.rating ? ' · ★ ' + esc(String(it.rating).replace('.', ',')) + (it.reviews ? ' (' + it.reviews + ')' : '') : '') + (it.offers > 1 ? ' · ' + it.offers + ' marchands' : '') + '</div>' +
+      '<div class="sm"><b>' + esc(eur(it.price)) + '</b>' + (it.shop ? ' chez ' + esc(it.shop) : '') + (it.rating ? ' · ★ ' + esc(String(it.rating).replace('.', ',')) + (it.reviews ? ' (' + it.reviews + ')' : '') : '') + (it.offers > 1 ? ' · ' + it.offers + ' marchands' : '') + (it.match != null ? ' · ' + it.match + ' % de correspondance' : '') + '</div>' +
       (t ? '<div class="st">' + spark(t.series) + '<span>' + (t.atLow ? 'Au plus bas sur ' + t.days + ' j' : (t.vsAvg > 0 ? '+' : '') + t.vsAvg + ' % vs moyenne ' + eur(t.avg)) + '</span></div>' : '') +
       badge + (it.why ? '<p>' + esc(it.why) + '</p>' : '') +
       '<div class="sa">' + (it.offer ? '<a class="pri" href="' + esc(it.offer) + '">Voir l’offre</a>' : '') + (it.url ? '<a href="' + esc(it.url) + '">Comparer les prix</a>' : '') + '</div></div></div>';
+  }
+  // tri des articles : recommandés (choix de l'IA) ou tous les articles suivis, triés
+  const SORTS = [['reco', 'Recommandés'], ['price', 'Prix croissant'], ['price-', 'Prix décroissant'], ['match', 'Correspondance'], ['rating', 'Note'], ['deal', 'Bonne affaire']];
+  let shopSort = 'reco';
+  function sorted(list, k) {
+    const a = list.slice(), P = (x) => x.price == null ? Infinity : x.price;
+    if (k === 'price') a.sort((x, y) => P(x) - P(y));
+    else if (k === 'price-') a.sort((x, y) => (y.price || 0) - (x.price || 0));
+    else if (k === 'match') a.sort((x, y) => (y.match || 0) - (x.match || 0));
+    else if (k === 'rating') a.sort((x, y) => ((y.rating || 0) + Math.log10((y.reviews || 0) + 1) / 10) - ((x.rating || 0) + Math.log10((x.reviews || 0) + 1) / 10));
+    else if (k === 'deal') a.sort((x, y) => (x.trend ? x.trend.vsAvg : 99) - (y.trend ? y.trend.vsAvg : 99));
+    return a;
   }
   function renderShop(v) {
     if (!shopEl || !v) return;
@@ -280,9 +293,14 @@
     if (v.busy || !(v.rounds || []).length) {
       h += '<ul class="steps">' + (v.steps || []).map((s) => '<li class="' + esc(s.s) + '">' + esc(s.t) + '</li>').join('') + '</ul>';
     }
-    (v.rounds || []).forEach((r) => {
+    if ((v.rounds || []).length && (v.all || []).length > 1) {
+      h += '<div class="sorts"><span>Trier</span>' + SORTS.map((x) => '<button data-sort="' + x[0] + '"' + (x[0] === shopSort ? ' class="on"' : '') + '>' + x[1] + '</button>').join('') + '</div>';
+    }
+    if (shopSort !== 'reco' && (v.all || []).length) {
+      h += '<h4>Tous les articles suivis (' + v.all.length + ')</h4>' + sorted(v.all, shopSort).map((it, i) => shopItem(it, i + 1)).join('');
+    } else (v.rounds || []).forEach((r) => {
       h += '<h4>' + esc(r.title) + '</h4>';
-      if (r.advice) h += '<div class="adv"><b>Conseil :</b> ' + esc(r.advice) + '</div>';
+      if (r.advice) h += '<div class="adv' + (r.provisional ? ' prov' : '') + '"><b>' + (r.provisional ? 'En cours :' : 'Conseil :') + '</b> ' + esc(r.advice.replace(/^Classement provisoire : /, 'classement provisoire, ')) + '</div>';
       h += (r.items || []).map((it, i) => shopItem(it, i + 1)).join('');
     });
     if (!v.busy && (v.suggestions || []).length) h += '<div class="sug"><span>Préciser :</span>' + v.suggestions.map((x) => '<button data-ref="' + esc(x) + '">' + esc(x) + '</button>').join('') + '</div>';
@@ -295,6 +313,8 @@
   if (panel) panel.addEventListener('click', (e) => {
     const r = e.target.closest('[data-ref]');
     if (r) { shopAct({ action: 'refine', texts: [r.dataset.ref] }); addQ(r.dataset.ref); return; }
+    const so = e.target.closest('[data-sort]');
+    if (so) { shopSort = so.dataset.sort; renderShop(shopView); return; }
     if (e.target.closest('[data-more]')) shopAct({ action: 'more' });
   });
   window.__corrtexShopping = {

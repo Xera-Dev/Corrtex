@@ -1000,6 +1000,7 @@
         '.row { display: flex; gap: 8px; }',
         '.sug { display: flex; flex-wrap: wrap; gap: 6px; } .sug button { all: unset; height: 28px; padding: 0 11px; border-radius: 14px; font-size: 12px; background: ' + glass + '; border: 1px solid ' + border + '; color: ' + dim + '; cursor: default; }',
         '.sug button:hover { color: ' + fg + '; background: ' + hover + '; } .sug button.on { color: ' + btnFg + '; background: ' + fg + '; border-color: ' + fg + '; }',
+        '.sorts { align-items: center; margin: 4px 0 2px; } .sorts .lbl { font-size: 12px; color: ' + dim + '; margin-right: 2px; }',
         'input { all: unset; box-sizing: border-box; flex: 1; min-width: 0; height: 38px; padding: 0 14px; border-radius: 19px; border: 1px solid ' + border + '; background: ' + glass + '; color: ' + fg + '; font-size: 13.5px; }',
         'input:focus { border-color: ' + fg + '; } input::placeholder { color: ' + dim + '; }',
         '.empty { font-size: 13px; color: ' + dim + '; padding: 18px 2px; line-height: 1.45; text-align: center; }',
@@ -1040,6 +1041,7 @@
       var mt = E('div', 'mt');
       if (it.rating) { var s = E('span'); s.append(E('span', 'stars', '★ ' + it.rating.toLocaleString('fr-FR', { maximumFractionDigits: 1 })), document.createTextNode(' (' + (it.reviews || 0).toLocaleString('fr-FR') + ' avis)')); mt.append(s); }
       if (it.offers) mt.append(E('span', '', it.offers + ' marchand' + (it.offers > 1 ? 's' : '')));
+      if (it.match != null && !local) mt.append(E('span', '', it.match + ' % de correspondance'));
       if (mt.children.length) b.append(mt);
       var pl = E('div', 'pl');
       pl.append(E('span', 'pr', it.price != null ? eur(it.price) : 'Prix indisponible'));
@@ -1111,6 +1113,17 @@
       else pn.style.animation = keepMode ? 'none' : '';
     }
 
+    var SORTS = [['reco', 'Recommandés'], ['price', 'Prix croissant'], ['price-', 'Prix décroissant'], ['match', 'Correspondance'], ['rating', 'Note'], ['deal', 'Bonne affaire']];
+    var sortBy = 'reco';
+    function sortList(list, k) {
+      var a = list.slice(), P = function (x) { return x.price == null ? Infinity : x.price; };
+      if (k === 'price') a.sort(function (x, y) { return P(x) - P(y); });
+      else if (k === 'price-') a.sort(function (x, y) { return (y.price || 0) - (x.price || 0); });
+      else if (k === 'match') a.sort(function (x, y) { return (y.match || 0) - (x.match || 0); });
+      else if (k === 'rating') a.sort(function (x, y) { return ((y.rating || 0) + Math.log10((y.reviews || 0) + 1) / 10) - ((x.rating || 0) + Math.log10((x.reviews || 0) + 1) / 10); });
+      else if (k === 'deal') a.sort(function (x, y) { return (x.trend ? x.trend.vsAvg : 99) - (y.trend ? y.trend.vsAvg : 99); });
+      return a;
+    }
     function renderResults(v, bd, pn) {
       var g = E('div', 'goal');
       g.append(E('div', 'q', v.goal || ''));
@@ -1122,10 +1135,24 @@
         v.steps.forEach(function (s) { var r = E('div', 'st ' + s.s); r.append(E('i'), E('span', '', s.t)); ss.append(r); });
         bd.append(ss);
       }
-      (v.rounds || []).forEach(function (r, ri) {
+      // tri : recommandés (choix de l'IA) ou tous les articles suivis par prix, correspondance, note…
+      if ((v.rounds || []).length && (v.all || []).length > 1) {
+        var so = E('div', 'sug sorts');
+        so.append(E('span', 'lbl', 'Trier'));
+        SORTS.forEach(function (x) {
+          var b = E('button', x[0] === sortBy ? 'on' : '', x[1]);
+          b.onclick = function () { sortBy = x[0]; render(); };
+          so.append(b);
+        });
+        bd.append(so);
+      }
+      if (sortBy !== 'reco' && (v.all || []).length) {
+        bd.append(E('h3', '', 'Tous les articles suivis (' + v.all.length + ')'));
+        sortList(v.all, sortBy).forEach(function (it, i) { bd.append(card(it, i, false)); });
+      } else (v.rounds || []).forEach(function (r, ri) {
         bd.append(E('h3', '', r.title));
-        if (r.advice) { var a = E('div', 'adv'); a.append(E('b', '', 'Conseil : '), document.createTextNode(r.advice)); bd.append(a); }
-        (r.items || []).forEach(function (it, i) { bd.append(card(it, i, ri === 0)); });
+        if (r.advice) { var a = E('div', 'adv'); a.append(E('b', '', r.provisional ? 'En cours : ' : 'Conseil : '), document.createTextNode(r.advice.replace(/^Classement provisoire : /, 'classement provisoire, '))); bd.append(a); }
+        (r.items || []).forEach(function (it, i) { bd.append(card(it, i, ri === 0 && !r.provisional)); });
       });
       // bas du panneau : continuer / préciser
       var ft = E('div', 'ft');
@@ -1213,6 +1240,8 @@
         render();
       },
       show: function (v) {
+        // nouvelle recherche : retour au classement recommandé
+        if (v && last && v.hid !== last.hid) sortBy = 'reco';
         local = null;
         if (v && v.history) { mode = 'history'; list = null; last = last || {}; render(); act({ action: 'history' }); return; }
         if (v && last && v.hid !== last.hid) { refineOpen = false; picked = {}; }

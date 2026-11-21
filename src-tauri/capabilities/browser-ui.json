@@ -49,6 +49,7 @@
     "allow-ai-prompt",
     "allow-ai-image",
     "allow-agent-kind",
+    "allow-shop-ai-warm",
     "allow-google-switch",
     "allow-shop-sites-set",
     "allow-shop-sites-reset",

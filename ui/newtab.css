@@ -564,3 +564,10 @@ body.ai-open #widgets, body.ai-open #player { opacity: 0; pointer-events: none; 
 .ai-query:empty { display: none; }
 #ai-thread > .ai-a { animation: aiIn .3s ease; }
 @keyframes aiIn { from { opacity: 0; transform: translateY(6px); } }
+
+/* tri des articles */
+.ai-a .sorts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 12px; font-size: 12.5px; color: var(--fg-dim); }
+.ai-a .sorts button { height: 28px; padding: 0 11px; border-radius: 14px; font-size: 12.5px; color: var(--fg-dim); background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.16); }
+.ai-a .sorts button:hover { color: var(--fg); }
+.ai-a .sorts button.on { color: var(--fg); border-color: color-mix(in srgb, var(--l1, #ff4f7b) 70%, transparent); background: color-mix(in srgb, var(--l1, #ff4f7b) 22%, transparent); }
+.ai-a .adv.prov { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.16); color: var(--fg-dim); }
