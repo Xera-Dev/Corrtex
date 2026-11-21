@@ -442,17 +442,18 @@ body.saver #wall.grad, body.saver #ambient .blob { animation-play-state: paused 
 #aibtn { position: relative; transition: background .2s, color .2s, transform .2s; }
 #aibtn svg { width: 24px; height: 24px; }
 #aibtn:hover { background: var(--hover); }
-#sbox.ai #aibtn { color: #fff; background: conic-gradient(from var(--ai-a), #ff4f7b, #ff8a3d, #ffd23f, #3ddc97, #2fb7ff, #6c63ff, #c86bff, #ff4f7b); animation: aiSpin 4s linear infinite; }
-#sbox.ai #aibtn svg { filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+/* bouton IA actif : simplement teinté de la couleur de la lueur (pas d'animation) */
+#sbox.ai #aibtn { color: var(--l1, #ff4f7b); background: color-mix(in srgb, var(--l1, #ff4f7b) 22%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--l1, #ff4f7b) 45%, transparent); }
 /* contour arc-en-ciel qui tourne, comme Siri : anneau net + halo flou derrière la barre */
 @property --ai-a { syntax: '<angle>'; initial-value: 0deg; inherits: true; }
 #sbox::before, #sbox::after { content: ""; position: absolute; inset: -3px; border-radius: 34px; pointer-events: none; opacity: 0; transition: opacity .35s;
-  background: conic-gradient(from var(--ai-a), #ff4f7b, #ff8a3d, #ffd23f, #3ddc97, #2fb7ff, #6c63ff, #c86bff, #ff4f7b); }
+  /* les couleurs de la lueur de fond (lumière d'ambiance) */
+  background: conic-gradient(from var(--ai-a), var(--l1, #ff4f7b), var(--l2, #ff8a3d), color-mix(in srgb, var(--l1, #ff4f7b) 40%, #fff), var(--l3, #c86bff), var(--l1, #ff4f7b), var(--l2, #ff8a3d), var(--l3, #c86bff), var(--l1, #ff4f7b)); }
 #sbox::before { z-index: 2; padding: 3px; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
 #sbox::after { z-index: 0; inset: -10px; filter: blur(22px); }
 #sbox.ai::before { opacity: 1; animation: aiSpin 4s linear infinite; }
 #sbox.ai::after { opacity: .45; animation: aiSpin 4s linear infinite, aiPulse 3s ease-in-out infinite; }
-#sbox.ai.thinking::before, #sbox.ai.thinking::after, #sbox.ai.thinking #aibtn { animation-duration: 1.3s, 1.2s; }
+#sbox.ai.thinking::before, #sbox.ai.thinking::after { animation-duration: 1.3s, 1.2s; }
 #sbox.ai.thinking::after { opacity: .85; }
 #sbox #search { position: relative; z-index: 1; }
 #sbox.ai #search { border-color: transparent; background: color-mix(in srgb, var(--page-2) 58%, transparent); }
@@ -511,3 +512,36 @@ body.ai-open #widgets, body.ai-open #player { opacity: 0; pointer-events: none; 
 #ai-follow button { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--fg); color: var(--page-2); }
 #ai-follow button svg { width: 17px; height: 17px; stroke-width: 2.2; }
 [data-theme="clair"] .ai-q span, [data-theme="clair"] .ai-src a, [data-theme="clair"] .ai-acts button, [data-theme="clair"] #ai-follow { background: rgba(0,0,0,.05); border-color: rgba(0,0,0,.12); }
+
+/* recherche d'achat de l'agent dans le panneau */
+.ai-a .sum { color: var(--fg-dim); font-size: 13.5px; }
+.ai-a .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ai-a .tags span { font-size: 12px; padding: 3px 10px; border-radius: 10px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16); }
+.ai-a .steps { list-style: none; margin-top: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+.ai-a .steps li { display: flex; gap: 9px; align-items: center; color: var(--fg-dim); }
+.ai-a .steps li::before { content: ""; width: 14px; height: 14px; border-radius: 50%; flex: none; border: 2px solid var(--fg-dim); }
+.ai-a .steps li.ok { color: var(--fg); } .ai-a .steps li.ok::before { background: #3ddc97; border-color: #3ddc97; }
+.ai-a .steps li.run::before { border-color: var(--l1, #ff4f7b); border-top-color: transparent; animation: spin .8s linear infinite; }
+.ai-a .steps li.err::before { border-color: #ff7a8a; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.ai-a h4 { margin-top: 14px; font-size: 14px; font-weight: 650; }
+.ai-a .adv { margin-top: 8px; padding: 10px 14px; border-radius: 14px; font-size: 13.5px; background: color-mix(in srgb, var(--l1, #ff4f7b) 14%, transparent); border: 1px solid color-mix(in srgb, var(--l1, #ff4f7b) 35%, transparent); }
+.si { position: relative; display: flex; gap: 14px; margin-top: 10px; padding: 12px; border-radius: 18px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); }
+.si .n { position: absolute; left: 6px; top: 6px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 11px; font-weight: 700; background: var(--fg); color: var(--page-2); }
+.si img, .si .noimg { width: 92px; height: 92px; border-radius: 12px; object-fit: contain; background: #fff; flex: none; }
+.si .sb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.si .sn { font-weight: 600; font-size: 14px; line-height: 1.3; }
+.si .sm { font-size: 13px; color: var(--fg-dim); } .si .sm b { color: var(--fg); font-size: 16px; }
+.si .st { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-dim); }
+.si .sp { width: 90px; height: 26px; } .si .sp polyline { fill: none; stroke: var(--l1, #ff4f7b); stroke-width: 1.8; }
+.si em { font-style: normal; font-size: 11.5px; font-weight: 700; align-self: flex-start; padding: 2px 8px; border-radius: 8px; }
+.si em.good { background: rgba(61,220,151,.18); color: #3ddc97; } .si em.warn { background: rgba(255,170,80,.18); color: #ffb35c; }
+.si p { font-size: 13px; line-height: 1.45; }
+.si .sa { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.si .sa a { height: 30px; padding: 0 12px; border-radius: 15px; display: inline-flex; align-items: center; font-size: 12.5px; font-weight: 600; text-decoration: none; color: var(--fg);
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2); }
+.si .sa a.pri { background: var(--fg); color: var(--page-2); border-color: transparent; }
+.ai-a .sug { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 12px; font-size: 12.5px; color: var(--fg-dim); }
+.ai-a .sug button, .ai-a .more button { height: 30px; padding: 0 12px; border-radius: 15px; font-size: 12.5px; color: var(--fg); background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2); }
+.ai-a .sug button:hover, .ai-a .more button:hover { background: rgba(255,255,255,.16); }
+.ai-a .more { margin-top: 10px; }

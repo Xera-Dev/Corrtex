@@ -48,6 +48,7 @@ fn main() {
             "search_page",
             "ai_prompt",
             "ai_image",
+            "agent_kind",
             "ai_image_result",
             "shop_sites_set",
             "shop_sites_reset",

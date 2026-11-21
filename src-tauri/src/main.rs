@@ -4370,6 +4370,27 @@ async fn agent_start(app: AppHandle, webview: Webview, goal: String) -> Result<S
     Ok("agent".into())
 }
 
+/// Recherche IA de l'accueil : que faire de la demande ?
+/// « shopping » : recherche d'achat (comparateur, suivi des prix) ; « action » : l'agent agit sur le web ;
+/// « answer » : simple question, réponse avec sources.
+#[tauri::command]
+async fn agent_kind(goal: String) -> String {
+    let g = goal.trim().to_lowercase();
+    if is_shopping_goal(&g) {
+        return "shopping".into();
+    }
+    let starts = [
+        "réserve", "reserve", "remplis", "inscris", "connecte", "commande", "ouvre ", "va sur", "aller sur", "trouve la page", "trouve-moi la page",
+        "contacte", "télécharge", "telecharge", "abonne", "désabonne", "ajoute ", "prends rendez", "prendre rendez", "envoie", "postule",
+        "achète", "réserver", "remplir", "s'inscrire", "inscris-moi", "trouve et ouvre", "cherche et ouvre", "navigue", "clique",
+    ];
+    let anywhere = ["pour moi", "à ma place", "a ma place", "sur le site", "sur leur site", "un billet", "une table", "un rendez-vous", "un créneau", "formulaire", "panier"];
+    if starts.iter().any(|w| g.starts_with(w)) || anywhere.iter().any(|w| g.contains(w)) {
+        return "action".into();
+    }
+    "answer".into()
+}
+
 // ---------------------------------------------------------------- recherche d'achat de l'agent
 /// La demande est-elle une recherche d'article à acheter ? (« trouve-moi un casque à moins de 100 € »)
 fn is_shopping_goal(goal: &str) -> bool {
@@ -6936,6 +6957,7 @@ fn main() {
             search_page,
             ai_prompt,
             ai_image,
+            agent_kind,
             ai_image_result,
             shop_sites_set,
             shop_sites_reset,

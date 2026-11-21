@@ -48,6 +48,7 @@
     "allow-search-page",
     "allow-ai-prompt",
     "allow-ai-image",
+    "allow-agent-kind",
     "allow-shop-sites-set",
     "allow-shop-sites-reset",
     "allow-ai-compare",

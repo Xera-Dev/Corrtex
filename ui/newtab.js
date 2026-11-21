@@ -58,7 +58,7 @@
     e.preventDefault();
     // mode IA : une adresse s'ouvre quand même, le reste est posé à l'IA
     const typed = $('q').value.trim();
-    if (aiOn && typed && !/(^|\s)![a-z]/i.test(typed) && C.toUrl(typed) === C.searchUrl(typed)) { ask(typed); $('q').value = ''; return; }
+    if (aiOn && typed && !/(^|\s)![a-z]/i.test(typed) && C.toUrl(typed) === C.searchUrl(typed)) { route(typed); $('q').value = ''; return; }
     const url = C.toUrl($('q').value);
     if (url) { C.prefetchSearch(url); location.href = url; }
   });
@@ -131,10 +131,42 @@
   }
   function scrollThread() { thread.scrollTop = thread.scrollHeight; }
 
+  // la demande passe par l'agent : achat → recherche d'achat (suivi des prix) dans ce panneau ;
+  // action sur le web → l'agent prend la main dans l'onglet ; question → réponse avec sources
+  async function route(q, forceAgent) {
+    q = clean(q);
+    if (!q) return;
+    const kind = forceAgent ? 'action' : await C.invoke('agent_kind', { goal: q }) || 'answer';
+    if (kind === 'answer') return ask(q);
+    hideSugg();
+    document.body.classList.add('ai-open');
+    panel.hidden = false;
+    $('ai-acts').hidden = true;
+    const qEl = document.createElement('div'); qEl.className = 'ai-q'; qEl.innerHTML = '<span>' + esc(q) + '</span>';
+    const aEl = document.createElement('div'); aEl.className = 'ai-a';
+    thread.append(qEl, aEl);
+    scrollThread();
+    if (kind === 'shopping') {
+      setMode('Recherche d’achat');
+      shopEl = aEl;
+      aEl.innerHTML = '<div class="ai-wait"><i></i><i></i><i></i></div>';
+      sbox.classList.add('thinking');
+    } else {
+      setMode('Agent');
+      aEl.innerHTML = '<p>L’agent prend la main : il ouvre une recherche, parcourt les pages et vous demande de valider chaque action importante.</p>';
+      sbox.classList.add('thinking');
+    }
+    try { await window.__TAURI__.core.invoke('agent_start', { goal: q }); }
+    catch (e) { sbox.classList.remove('thinking'); aEl.innerHTML = '<p class="err">' + esc(String(e)) + '</p>'; }
+  }
+  function setMode(t) { panel.querySelector('header span').textContent = t; }
+
   async function ask(q) {
     q = clean(q);
     if (!q) return;
     hideSugg();
+    setMode('Recherche IA');
+    shopEl = null;
     document.body.classList.add('ai-open');
     panel.hidden = false;
     $('ai-acts').hidden = true;
@@ -180,6 +212,8 @@
     } else scrollThread();
   };
   function closeAi() {
+    if (shopEl) shopAct({ action: 'close' });
+    shopEl = null; shopView = null;
     panel.hidden = true;
     document.body.classList.remove('ai-open');
     sbox.classList.remove('thinking');
@@ -189,13 +223,95 @@
   }
   $('ai-close').onclick = closeAi;
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden && !document.querySelector('.drawer.open')) closeAi(); });
-  $('ai-follow').addEventListener('submit', (e) => { e.preventDefault(); const v = $('ai-fq').value; $('ai-fq').value = ''; ask(v); });
+  $('ai-follow').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = clean($('ai-fq').value);
+    $('ai-fq').value = '';
+    if (!v) return;
+    // pendant une recherche d'achat, la question de suivi précise la recherche
+    if (shopEl && shopView && !shopView.busy) { shopAct({ action: 'refine', texts: [v] }); addQ(v); return; }
+    route(v);
+  });
+  function addQ(v) { const qEl = document.createElement('div'); qEl.className = 'ai-q'; qEl.innerHTML = '<span>' + esc(v) + '</span>'; thread.insertBefore(qEl, shopEl); }
   $('ai-results').onclick = () => { const q = conv.length ? conv[conv.length - 1].q : $('q').value; location.href = C.pageUrl('search.html') + '#q=' + encodeURIComponent(q); };
+  // « Confier à l'agent » : l'agent agit sur le web pour la dernière demande
+  const agentBtn = document.createElement('button');
+  agentBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M5 4.5l5.5 14 2-5.8 5.8-2z"/><path d="M13 13l5.5 5.5"/></svg>Confier à l’agent';
+  agentBtn.title = 'L’agent ouvre les pages et agit pour vous (vous validez chaque action)';
+  agentBtn.onclick = () => { const t = conv[conv.length - 1]; if (t) route(t.q, true); };
+  $('ai-acts').insertBefore(agentBtn, $('ai-panel-btn'));
   $('ai-panel-btn').onclick = () => { const t = conv[conv.length - 1]; if (t) C.invoke('ai_prompt', { prompt: t.q }); };
   $('ai-copy').onclick = () => { const t = conv[conv.length - 1]; if (t && navigator.clipboard) navigator.clipboard.writeText(t.a).then(() => { $('ai-copy').lastChild.textContent = 'Copié'; setTimeout(() => { $('ai-copy').lastChild.textContent = 'Copier'; }, 1400); }); };
   // liens de la réponse : Ctrl+clic ou clic molette = nouvel onglet
   panel.addEventListener('click', (e) => { const a = e.target.closest('a[href]'); if (a && (e.ctrlKey || e.metaKey)) { e.preventDefault(); C.invoke('new_tab', { url: a.href }); } });
   panel.addEventListener('auxclick', (e) => { const a = e.target.closest('a[href]'); if (a && e.button === 1) { e.preventDefault(); C.invoke('new_tab', { url: a.href }); } });
+
+
+  // ------------------------------------------------------------- recherche d'achat de l'agent, dans le panneau de l'accueil
+  // Le moteur caché (shopping.html) envoie son affichage à l'onglet actif : ici, au lieu du
+  // panneau posé sur la page, il s'affiche dans le panneau de la recherche IA.
+  let shopEl = null, shopView = null;
+  const eur = (n) => n == null ? '' : n.toLocaleString('fr-FR', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }) + ' €';
+  function shopAct(a) { try { window.__TAURI__.core.invoke('tab_event', { kind: 'shopping_action', data: a }); } catch (e) {} }
+  function spark(series) {
+    if (!series || series.length < 2) return '';
+    const mn = Math.min(...series), mx = Math.max(...series), w = 90, h = 26;
+    const pts = series.map((v, i) => (i / (series.length - 1) * w).toFixed(1) + ',' + (h - 2 - (mx === mn ? .5 : (v - mn) / (mx - mn)) * (h - 4)).toFixed(1)).join(' ');
+    return '<svg class="sp" viewBox="0 0 ' + w + ' ' + h + '"><polyline points="' + pts + '"/></svg>';
+  }
+  function shopItem(it, n) {
+    const t = it.trend;
+    const badge = it.timing === 'buy' ? '<em class="good">Bon moment pour acheter</em>' : it.timing === 'wait' ? '<em class="warn">Prix au-dessus de sa moyenne</em>' : '';
+    return '<div class="si"><i class="n">' + n + '</i>' + (it.image ? '<img alt="" loading="lazy" src="' + esc(it.image) + '" onerror="this.style.visibility=\'hidden\'">' : '<div class="noimg"></div>') +
+      '<div class="sb"><div class="sn">' + esc(it.name) + '</div>' +
+      '<div class="sm"><b>' + esc(eur(it.price)) + '</b>' + (it.shop ? ' chez ' + esc(it.shop) : '') + (it.rating ? ' · ★ ' + esc(String(it.rating).replace('.', ',')) + (it.reviews ? ' (' + it.reviews + ')' : '') : '') + (it.offers > 1 ? ' · ' + it.offers + ' marchands' : '') + '</div>' +
+      (t ? '<div class="st">' + spark(t.series) + '<span>' + (t.atLow ? 'Au plus bas sur ' + t.days + ' j' : (t.vsAvg > 0 ? '+' : '') + t.vsAvg + ' % vs moyenne ' + eur(t.avg)) + '</span></div>' : '') +
+      badge + (it.why ? '<p>' + esc(it.why) + '</p>' : '') +
+      '<div class="sa">' + (it.offer ? '<a class="pri" href="' + esc(it.offer) + '">Voir l’offre</a>' : '') + (it.url ? '<a href="' + esc(it.url) + '">Comparer les prix</a>' : '') + '</div></div></div>';
+  }
+  function renderShop(v) {
+    if (!shopEl || !v) return;
+    shopView = v;
+    let h = '';
+    if (v.summary) h += '<p class="sum">' + esc(v.summary) + '</p>';
+    if (v.tags && v.tags.length) h += '<div class="tags">' + v.tags.map((x) => '<span>' + esc(x) + '</span>').join('') + '</div>';
+    if (v.busy || !(v.rounds || []).length) {
+      h += '<ul class="steps">' + (v.steps || []).map((s) => '<li class="' + esc(s.s) + '">' + esc(s.t) + '</li>').join('') + '</ul>';
+    }
+    (v.rounds || []).forEach((r) => {
+      h += '<h4>' + esc(r.title) + '</h4>';
+      if (r.advice) h += '<div class="adv"><b>Conseil :</b> ' + esc(r.advice) + '</div>';
+      h += (r.items || []).map((it, i) => shopItem(it, i + 1)).join('');
+    });
+    if (!v.busy && (v.suggestions || []).length) h += '<div class="sug"><span>Préciser :</span>' + v.suggestions.map((x) => '<button data-ref="' + esc(x) + '">' + esc(x) + '</button>').join('') + '</div>';
+    if (!v.busy && (v.rounds || []).length) h += '<div class="more"><button data-more>Continuer la recherche</button></div>';
+    shopEl.innerHTML = h;
+    sbox.classList.toggle('thinking', !!v.busy);
+    $('ai-fq').placeholder = v.busy ? 'Recherche en cours…' : 'Préciser la recherche (budget, marque, usage…)';
+    if (!v.busy) $('ai-acts').hidden = true;
+    scrollThread();
+  }
+  if (panel) panel.addEventListener('click', (e) => {
+    const r = e.target.closest('[data-ref]');
+    if (r) { shopAct({ action: 'refine', texts: [r.dataset.ref] }); addQ(r.dataset.ref); return; }
+    if (e.target.closest('[data-more]')) shopAct({ action: 'more' });
+  });
+  window.__corrtexShopping = {
+    show(v) {
+      if (!v) return;
+      if (v.mode === 'history' || !v.goal) return;
+      if (!shopEl) {
+        // recherche lancée ailleurs (outils, historique) : on ouvre le panneau pour elle
+        document.body.classList.add('ai-open'); panel.hidden = false; setMode('Recherche d’achat');
+        const qEl = document.createElement('div'); qEl.className = 'ai-q'; qEl.innerHTML = '<span>' + esc(v.goal) + '</span>';
+        shopEl = document.createElement('div'); shopEl.className = 'ai-a';
+        thread.append(qEl, shopEl);
+      }
+      renderShop(v);
+    },
+    hide() { sbox.classList.remove('thinking'); },
+    history() {},
+  };
 
   // ------------------------------------------------------------- widget musique
   const player = $('player');
