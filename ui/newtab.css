@@ -558,3 +558,9 @@ body.ai-open #widgets, body.ai-open #player { opacity: 0; pointer-events: none; 
 .gacc .ok svg { width: 14px; height: 14px; stroke-width: 2.6; }
 .gacc.add .gav { background: var(--hover); color: var(--fg); }
 .gacc.add .gav svg { width: 20px; height: 20px; }
+
+/* résultats en panneau (pas en discussion) : la recherche en titre */
+.ai-query { margin-top: 8px; font-size: 21px; font-weight: 650; line-height: 1.25; letter-spacing: -.2px; flex: none; }
+.ai-query:empty { display: none; }
+#ai-thread > .ai-a { animation: aiIn .3s ease; }
+@keyframes aiIn { from { opacity: 0; transform: translateY(6px); } }

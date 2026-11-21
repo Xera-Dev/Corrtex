@@ -593,7 +593,10 @@
       }
       setTimeout(placeRw, 30);
     }
+    // bouton « Réécrire avec l'IA » dans les champs de texte : désactivé (à la demande de l'utilisateur)
+    var RW_ON = false;
     document.addEventListener('focusin', function (e) {
+      if (!RW_ON) return;
       var f = editable(e.composedPath ? e.composedPath()[0] : e.target);
       if (!f) return;
       rwField = f;

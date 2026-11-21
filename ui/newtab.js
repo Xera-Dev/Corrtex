@@ -142,10 +142,12 @@
     document.body.classList.add('ai-open');
     panel.hidden = false;
     $('ai-acts').hidden = true;
-    const qEl = document.createElement('div'); qEl.className = 'ai-q'; qEl.innerHTML = '<span>' + esc(q) + '</span>';
+    // un panneau de résultats : la recherche en titre, le contenu remplacé à chaque recherche
     const aEl = document.createElement('div'); aEl.className = 'ai-a';
-    thread.append(qEl, aEl);
-    scrollThread();
+    thread.replaceChildren(aEl);
+    $('ai-query').textContent = q;
+    conv = []; cur = null; aiReq = '';
+    thread.scrollTop = 0;
     if (kind === 'shopping') {
       setMode('Recherche d’achat');
       shopEl = aEl;
@@ -174,11 +176,11 @@
     const turn = { q, a: '', src: [] };
     conv.push(turn);
     cur = turn;
-    const qEl = document.createElement('div'); qEl.className = 'ai-q'; qEl.innerHTML = '<span>' + esc(q) + '</span>';
     const aEl = document.createElement('div'); aEl.className = 'ai-a'; aEl.innerHTML = '<div class="ai-wait"><i></i><i></i><i></i></div>';
-    thread.append(qEl, aEl);
+    thread.replaceChildren(aEl);
+    $('ai-query').textContent = q;
     turn.el = aEl;
-    scrollThread();
+    thread.scrollTop = 0;
     $('ai-state').textContent = 'recherche des sources…';
     turn.src = await sources(conv.length > 1 ? conv[0].q + ' ' + q : q);
     if (cur !== turn) return;
@@ -207,9 +209,8 @@
         t.el.appendChild(s);
       }
       $('ai-acts').hidden = false;
-      scrollThread();
       setTimeout(() => $('ai-fq').focus(), 50);
-    } else scrollThread();
+    }
   };
   function closeAi() {
     if (shopEl) shopAct({ action: 'close' });
@@ -218,6 +219,7 @@
     document.body.classList.remove('ai-open');
     sbox.classList.remove('thinking');
     thread.replaceChildren();
+    $('ai-query').textContent = '';
     conv = []; cur = null; aiReq = '';
     $('q').focus();
   }
@@ -229,10 +231,10 @@
     $('ai-fq').value = '';
     if (!v) return;
     // pendant une recherche d'achat, la question de suivi précise la recherche
-    if (shopEl && shopView && !shopView.busy) { shopAct({ action: 'refine', texts: [v] }); addQ(v); return; }
+    if (shopEl && shopView && !shopView.busy) { shopAct({ action: 'refine', texts: [v] }); return; }
     route(v);
   });
-  function addQ(v) { const qEl = document.createElement('div'); qEl.className = 'ai-q'; qEl.innerHTML = '<span>' + esc(v) + '</span>'; thread.insertBefore(qEl, shopEl); }
+  function addQ() {}
   $('ai-results').onclick = () => { const q = conv.length ? conv[conv.length - 1].q : $('q').value; location.href = C.pageUrl('search.html') + '#q=' + encodeURIComponent(q); };
   // « Confier à l'agent » : l'agent agit sur le web pour la dernière demande
   const agentBtn = document.createElement('button');
@@ -289,7 +291,6 @@
     sbox.classList.toggle('thinking', !!v.busy);
     $('ai-fq').placeholder = v.busy ? 'Recherche en cours…' : 'Préciser la recherche (budget, marque, usage…)';
     if (!v.busy) $('ai-acts').hidden = true;
-    scrollThread();
   }
   if (panel) panel.addEventListener('click', (e) => {
     const r = e.target.closest('[data-ref]');
@@ -303,9 +304,9 @@
       if (!shopEl) {
         // recherche lancée ailleurs (outils, historique) : on ouvre le panneau pour elle
         document.body.classList.add('ai-open'); panel.hidden = false; setMode('Recherche d’achat');
-        const qEl = document.createElement('div'); qEl.className = 'ai-q'; qEl.innerHTML = '<span>' + esc(v.goal) + '</span>';
         shopEl = document.createElement('div'); shopEl.className = 'ai-a';
-        thread.append(qEl, shopEl);
+        thread.replaceChildren(shopEl);
+        $('ai-query').textContent = v.goal;
       }
       renderShop(v);
     },

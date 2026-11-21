@@ -144,13 +144,14 @@
     <section id="aipanel" class="glass-sugg ai-panel" hidden>
       <header><svg viewBox="0 0 24 24"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/></svg><span>Recherche IA</span><small id="ai-state"></small>
         <button id="ai-close" title="Fermer (Échap)"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <h2 class="ai-query" id="ai-query"></h2>
       <div id="ai-thread"></div>
       <div class="ai-acts" id="ai-acts" hidden>
         <button id="ai-results"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>Tous les résultats</button>
         <button id="ai-panel-btn"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M14.5 4.5v15"/></svg>Continuer dans le panneau IA</button>
         <button id="ai-copy"><svg viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/></svg>Copier</button>
       </div>
-      <form id="ai-follow" autocomplete="off"><input id="ai-fq" type="text" spellcheck="false" placeholder="Poser une question de suivi…"><button title="Envoyer"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button></form>
+      <form id="ai-follow" autocomplete="off"><input id="ai-fq" type="text" spellcheck="false" placeholder="Préciser ou lancer une nouvelle recherche…"><button title="Envoyer"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button></form>
     </section>
   </main>
 
