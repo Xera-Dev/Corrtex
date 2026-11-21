@@ -117,6 +117,53 @@
     return out.slice(0, 8);
   }
 
+  // ------------------------------------------------ article de journal (mode IA, questions)
+  // image de référence : la fiche Wikipédia si elle correspond, sinon la première image de DuckDuckGo
+  async function imageFor(q) {
+    const inv = (source) => Promise.race([window.__TAURI__.core.invoke('search_fetch', { source, q, page: 1, form: null }), new Promise((r, j) => setTimeout(() => j('lent'), 4500))]);
+    const words = (x) => String(x).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
+    try {
+      const p = ((JSON.parse(await inv('wiki')).query || {}).pages || [])[0];
+      if (p && p.thumbnail && /^https:/.test(p.thumbnail.source)) {
+        const tq = words(q), tt = words(p.title);
+        const common = tt.filter((w) => w && tq.indexOf(w) >= 0).length;
+        if (tt.length && common / tt.length >= 0.5) return { src: p.thumbnail.source.replace(/\/(\d+)px-/, '/960px-'), small: p.thumbnail.source, credit: 'Wikipédia · ' + p.title, url: p.fullurl };
+      }
+    } catch (e) {}
+    try {
+      const r = (JSON.parse(await inv('images')).results || []).find((x) => /^https:/.test(x.image || '') && (x.width || 0) >= 500);
+      if (r) return { src: r.image, small: r.thumbnail, credit: C.hostOf(r.url), url: r.url };
+    } catch (e) {}
+    return null;
+  }
+  function renderArticle(t, text, done) {
+    const lines = String(text).replace(/\r/g, '').split('\n');
+    let title = '', lede = '', body = '', ul = false, firstP = true;
+    const inline = (l) => esc(l).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*]+)\*/g, '$1<i>$2</i>')
+      .replace(/\[(\d{1,2})\]/g, (m, n) => { const r = t.src[+n - 1]; return r ? '<a class="cite" href="' + esc(r.url) + '" title="' + esc(r.title) + '">' + n + '</a>' : m; });
+    for (const raw of lines) {
+      const l = raw.trim();
+      if (!l) continue;
+      const li = l.match(/^(?:[-*•]|\d+[.)])\s+(.*)/);
+      if (!li && ul) { body += '</ul>'; ul = false; }
+      if (/^#\s+/.test(l) && !title) title = inline(l.replace(/^#\s+/, ''));
+      else if (/^>\s*/.test(l)) lede += (lede ? ' ' : '') + inline(l.replace(/^>\s*/, '').replace(/^chapeau\s*:\s*/i, ''));
+      else if (/^#{2,4}\s+/.test(l)) { const h = l.replace(/^#{2,4}\s+/, ''); body += '<h3' + (/^à retenir/i.test(h) ? ' class="keep"' : '') + '>' + inline(h) + '</h3>'; }
+      else if (li) { if (!ul) { body += '<ul>'; ul = true; } body += '<li>' + inline(li[1]) + '</li>'; }
+      else if (!title && !body && !lede) title = inline(l.replace(/^titre\s*:\s*/i, ''));
+      else { body += '<p' + (firstP ? ' class="first"' : '') + '>' + inline(l) + '</p>'; firstP = false; }
+    }
+    if (ul) body += '</ul>';
+    const words = String(text).split(/\s+/).length;
+    const date = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+    const img = t.img;
+    t.el.innerHTML = '<article class="news">' +
+      (img ? '<figure><img alt="" src="' + esc(img.src) + '" onerror="if(this.dataset.f){this.closest(\'figure\').remove()}else{this.dataset.f=1;this.src=\'' + esc(img.small || '') + '\'}"><figcaption>' + esc(img.credit || '') + '</figcaption></figure>' : '') +
+      '<div class="kicker">Corrtex IA · ' + esc(date) + ' · ' + Math.max(1, Math.round(words / 200)) + ' min de lecture</div>' +
+      (title ? '<h1>' + title + '</h1>' : '') + (lede ? '<p class="lede">' + lede + '</p>' : '') +
+      '<div class="body">' + body + (done ? '' : '<span class="caret"></span>') + '</div></article>';
+  }
+
   function format(t, src) {
     const lines = esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/^#{1,4}\s*(.+)$/gm, '<b>$1</b>').split(/\n+/);
     let out = '', ul = false;
@@ -179,26 +226,37 @@
     cur = turn;
     const aEl = document.createElement('div'); aEl.className = 'ai-a'; aEl.innerHTML = '<div class="ai-wait"><i></i><i></i><i></i></div>';
     thread.replaceChildren(aEl);
-    $('ai-query').textContent = q;
+    // l'article a son propre titre : la question n'est pas répétée au-dessus
+    $('ai-query').textContent = '';
     turn.el = aEl;
     thread.scrollTop = 0;
     $('ai-state').textContent = 'recherche des sources…';
-    turn.src = await sources(conv.length > 1 ? conv[0].q + ' ' + q : q);
+    // l'image de référence est cherchée en même temps que les sources
+    const subject = conv.length > 1 ? conv[0].q + ' ' + q : q;
+    turn.imgP = imageFor(subject);
+    turn.src = await sources(subject);
     if (cur !== turn) return;
     $('ai-state').textContent = 'l’IA rédige…';
+    turn.imgP.then((im) => { if (!im || cur !== turn) return; turn.img = im; if (turn.a) renderArticle(turn, turn.a, !aiReq); else turn.el.insertAdjacentHTML('afterbegin', ''); });
     const srcTxt = turn.src.map((r, i) => '[' + (i + 1) + '] ' + r.title + ' — ' + r.url + '\n' + r.snippet).join('\n\n');
     const hist = conv.slice(0, -1).map((t) => 'Question : ' + t.q + '\nRéponse : ' + t.a.slice(0, 1200)).join('\n\n');
     const prompt = (hist ? 'Conversation précédente :\n' + hist + '\n\n' : '') +
       'Question : « ' + q + ' »\n\n' + (srcTxt ? 'Résultats de recherche web actuels :\n\n' + srcTxt + '\n\n' : '') +
-      'Réponds en français, directement et clairement (un court paragraphe, ou une liste si c’est plus lisible), à partir de ces résultats et de tes connaissances. ' +
-      (srcTxt ? 'Cite les sources utilisées avec leur numéro entre crochets, par exemple [2]. ' : '') + 'Pas d’introduction ni de formule de politesse.';
+      'Rédige en français un court article de presse qui répond à la question, à partir de ces résultats et de tes connaissances, avec exactement cette structure :\n' +
+      '# Titre accrocheur et informatif\n' +
+      '> Chapeau : l’essentiel de la réponse en deux phrases.\n' +
+      '## Intertitre\nParagraphe de 2 à 4 phrases.\n' +
+      '## Intertitre\nParagraphe de 2 à 4 phrases.\n' +
+      '## À retenir\n- 3 points clés courts\n' +
+      'Deux ou trois intertitres au total avant « À retenir ». ' +
+      (srcTxt ? 'Cite les sources utilisées avec leur numéro entre crochets, par exemple [2]. ' : '') + 'Pas d’introduction ni de formule de politesse, pas d’autre texte autour de l’article.';
     aiReq = 'na' + Date.now().toString(36);
     window.__TAURI__.core.invoke('shop_ask_ai', { prompt, req: aiReq }).catch((e) => window.__corrtexShopAI(aiReq, '', true, true));
   }
   window.__corrtexShopAI = (req, text, done, error) => {
     if (req !== aiReq || !cur) return;
     const t = cur;
-    if (text) { t.a = text; t.el.innerHTML = format(text, t.src); }
+    if (text) { t.a = text; renderArticle(t, text, !!(done || error)); }
     if (done || error) {
       aiReq = '';
       sbox.classList.remove('thinking');
@@ -207,6 +265,7 @@
       if (t.src.length) {
         const s = document.createElement('div'); s.className = 'ai-src';
         s.innerHTML = t.src.slice(0, 6).map((r, i) => '<a href="' + esc(r.url) + '" title="' + esc(r.title) + '"><b>' + (i + 1) + '</b><img alt="" loading="lazy" src="' + esc(C.favicon(r.url, 32)) + '" onerror="this.remove()"><span>' + esc(C.hostOf(r.url)) + '</span></a>').join('');
+        s.insertAdjacentHTML('afterbegin', '<span class="lbl">Sources</span>');
         t.el.appendChild(s);
       }
       $('ai-acts').hidden = false;
