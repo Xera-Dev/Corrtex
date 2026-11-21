@@ -24,7 +24,7 @@
         span.append(document.createTextNode(text.slice(0, q.length)));
         const b = document.createElement('b'); b.textContent = text.slice(q.length); span.append(b);
       } else { const b = document.createElement('b'); b.textContent = text; span.append(b); }
-      el.addEventListener('mousedown', (e) => { e.preventDefault(); location.href = C.toUrl(text); });
+      el.addEventListener('mousedown', (e) => { e.preventDefault(); const u = C.toUrl(text); C.prefetchSearch(u); location.href = u; });
       box.appendChild(el);
     });
   }
@@ -57,9 +57,11 @@
   $('search').addEventListener('submit', (e) => {
     e.preventDefault();
     const url = C.toUrl($('q').value);
-    if (url) location.href = url;
+    if (url) { C.prefetchSearch(url); location.href = url; }
   });
   setTimeout(() => $('q').focus(), 50);
+  // connexions vers les moteurs ouvertes à l'avance : la première recherche part plus vite
+  if (C.engine() === 'corrtex') C.invoke('search_warm');
 
   // Recherche vocale (si le moteur la prend en charge)
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;

@@ -125,7 +125,7 @@
   $('retry').onclick = retry;
   $('search').onclick = () => {
     const term = host || url;
-    location.href = 'https://www.google.com/search?q=' + encodeURIComponent(term);
+    location.href = window.Corrtex.searchUrl(term);
   };
   if (kind.offline) $('wait').classList.add('on');
   // la connexion revient : on recharge tout seul

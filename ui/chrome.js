@@ -247,7 +247,8 @@
   function renderToolbar() {
     const t = activeTab();
     $('reload').classList.toggle('loading', !!(t && t.loading && t.url));
-    if (!editing) address.value = t ? t.url : '';
+    // page de résultats Corrtex : la barre montre la recherche
+    if (!editing) address.value = t ? (t.url || (/^search\.html#/.test(t.page || '') ? new URLSearchParams(t.page.slice(12)).get('q') || '' : '')) : '';
     const icon = $('omni-icon');
     if (t && t.url && /^https:/.test(t.url)) {
       icon.innerHTML = '<svg viewBox="0 0 24 24"><rect x="5.5" y="10.5" width="13" height="9" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>';
@@ -428,7 +429,7 @@
   let hist = { inline: null, items: [], typed: '' };
   let lastGoogle = [];
 
-  function looksLikeUrl(text) { const u = C.toUrl(text); return u && !u.startsWith('https://www.google.com/search?q='); }
+  function looksLikeUrl(text) { const u = C.toUrl(text); return !!u && u !== C.searchUrl(text.trim()); }
   const bare = (u) => (u || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '');
 
   function pushSuggestions() {
@@ -519,10 +520,11 @@
     closeSuggestions();
     editing = false;
     address.blur();
+    C.prefetchSearch(url);
     C.invoke('navigate', { url });
   }
 
-  address.addEventListener('focus', () => { editing = true; setTimeout(() => address.select(), 0); });
+  address.addEventListener('focus', () => { editing = true; setTimeout(() => address.select(), 0); if (C.engine() === 'corrtex') C.invoke('search_warm'); });
   address.addEventListener('blur', () => {
     editing = false;
     // petit délai : un clic dans la liste doit pouvoir être pris en compte

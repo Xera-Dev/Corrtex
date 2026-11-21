@@ -177,8 +177,22 @@
     </details>
 
     <details class="cat" data-cat="nav">
-      <summary><span class="cat-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span><span class="cat-t"><b>Navigation</b><small>Confidentialité, onglets, gestes et raccourcis</small></span><svg class="cat-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></summary>
+      <summary><span class="cat-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span><span class="cat-t"><b>Navigation</b><small>Moteur de recherche, confidentialité, onglets, gestes</small></span><svg class="cat-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></summary>
       <div class="cat-body">
+        <div class="group">
+          <h3>Moteur de recherche</h3>
+          <p class="hint">Utilisé par la barre d’adresse et la page d’accueil. Corrtex : votre propre moteur, sans publicité ni pistage, qui réunit DuckDuckGo, Mojeek, Marginalia et Wikipédia.</p>
+          <div id="set-engine" class="chips"></div>
+          <div class="row" style="margin-top:14px">
+            <span class="hint" style="margin:0">Réponse de l’IA automatique en haut des résultats</span>
+            <label class="switch"><input type="checkbox" id="set-search-ai"><span></span></label>
+          </div>
+          <p class="hint" style="margin-top:14px">Sites toujours remontés (un par ligne) :</p>
+          <textarea id="set-search-boost" class="area" rows="3" spellcheck="false" placeholder="wikipedia.org"></textarea>
+          <p class="hint" style="margin-top:10px">Sites masqués (un par ligne) :</p>
+          <textarea id="set-search-hide" class="area" rows="3" spellcheck="false" placeholder="pinterest.com"></textarea>
+          <p class="hint" style="margin-top:10px">Raccourcis : <b>!g</b> Google, <b>!yt</b> YouTube, <b>!w</b> Wikipédia, <b>!a</b> Amazon, <b>!m</b> Maps, <b>!i</b> images, <b>!n</b> actualités, <b>!v</b> vidéos (ex. « chat !yt »).</p>
+        </div>
         <div class="group">
           <h3>Confidentialité</h3>
           <div class="row" style="margin-top:12px">

@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Recherche Corrtex</title>
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="theme.css">
+<script src="common.js"></script>
+<style>
+  /* Page de résultats du moteur Corrtex : même fond, verre et typographie que la page d'accueil.
+     Pensée pour être rapide : aucun fichier externe, rendu en un seul passage, halo fixe
+     (pas d'animation), éléments hors écran non dessinés (content-visibility). */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--page-2); }
+  body {
+    min-height: 100vh; font: 15px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif; color: var(--fg);
+    background: linear-gradient(180deg, var(--page-1), var(--page-2) 70vh) fixed;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  a { color: inherit; text-decoration: none; }
+  .glow { position: fixed; inset: -20vh -10vw auto; height: 70vh; pointer-events: none; z-index: 0;
+    background: radial-gradient(60% 60% at 30% 20%, color-mix(in srgb, var(--l1, #ff4f7b) 55%, transparent), transparent 70%),
+                radial-gradient(45% 50% at 80% 10%, color-mix(in srgb, var(--l3, #c86bff) 45%, transparent), transparent 70%);
+    opacity: calc(var(--light-strength) * var(--intensity, 1)); }
+  .light-off .glow { display: none; }
+
+  /* ------------------------------------------------ en-tête */
+  header { position: sticky; top: 0; z-index: 5; padding: 18px clamp(16px, 4vw, 56px) 0;
+    background: color-mix(in srgb, var(--page-1) 72%, transparent); backdrop-filter: blur(18px) saturate(1.2); -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    border-bottom: 1px solid var(--hover); }
+  .bar { display: flex; align-items: center; gap: 22px; max-width: 1180px; }
+  .brand { font: 700 30px/1 'Poppins', sans-serif; letter-spacing: -.5px; flex: none; position: relative; padding-right: 10px;
+    text-shadow: 0 2px 16px color-mix(in srgb, var(--fg) 20%, transparent); }
+  .brand svg { position: absolute; right: -6px; top: -9px; width: 20px; height: 14px; stroke-width: 4.5; }
+  #sform { flex: 1; max-width: 680px; height: 50px; display: flex; align-items: center; gap: 12px; padding: 0 10px 0 18px; border-radius: 25px;
+    border: 2px solid var(--glass-border); background: var(--glass); box-shadow: 0 8px 24px rgba(0,0,0,.18); transition: border-color .15s; }
+  #sform:focus-within { border-color: color-mix(in srgb, var(--fg) 70%, transparent); }
+  #sform > svg { width: 21px; height: 21px; opacity: .8; flex: none; }
+  #q { flex: 1; min-width: 0; background: none; border: 0; outline: 0; color: var(--fg); font: inherit; font-size: 16.5px; }
+  #q::placeholder { color: var(--fg-dim); }
+  .icon-btn { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex: none; color: var(--fg-dim); }
+  .icon-btn:hover { background: var(--hover); color: var(--fg); }
+  .icon-btn svg { width: 18px; height: 18px; }
+  #clear[hidden] { display: none; }
+  nav { display: flex; gap: 4px; margin-top: 12px; max-width: 1180px; padding-left: calc(30px * 3.6 + 22px); }
+  nav button { position: relative; display: flex; align-items: center; gap: 7px; height: 40px; padding: 0 14px; font-size: 14px; color: var(--fg-dim); border-radius: 12px 12px 0 0; }
+  nav button svg { width: 17px; height: 17px; }
+  nav button:hover { color: var(--fg); background: var(--tab-hover); }
+  nav button.on { color: var(--fg); font-weight: 600; }
+  nav button.on::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: var(--l1, #ff4f7b); }
+
+  /* ------------------------------------------------ résultats */
+  main { position: relative; z-index: 1; display: flex; gap: 48px; align-items: flex-start; max-width: 1180px;
+    padding: 18px clamp(16px, 4vw, 56px) 80px calc(clamp(16px, 4vw, 56px) + 30px * 3.6 + 22px + 6px); }
+  #col { flex: 1; min-width: 0; max-width: 680px; }
+  #side { width: 340px; flex: none; position: sticky; top: 140px; }
+  #side:empty { display: none; }
+  #status { font-size: 13px; color: var(--fg-dim); min-height: 20px; margin-bottom: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  #status .err { color: color-mix(in srgb, #ff7a8a 85%, var(--fg)); }
+  #status button { color: var(--fg); text-decoration: underline; text-underline-offset: 2px; }
+  #results { list-style: none; }
+  .r { position: relative; padding: 12px 14px; margin: 0 -14px 4px; border-radius: 16px; content-visibility: auto; contain-intrinsic-size: auto 104px; }
+  .r:hover, .r.kb { background: var(--glass); box-shadow: inset 0 0 0 1px var(--hover); }
+  .u { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--fg-dim); min-width: 0; }
+  .fav { width: 26px; height: 26px; border-radius: 8px; flex: none; padding: 4px; background: var(--glass); border: 1px solid var(--hover); }
+  .u span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .u b { color: var(--fg); font-weight: 500; }
+  .t { display: block; margin-top: 6px; font-size: 18.5px; line-height: 1.3; font-weight: 500; color: color-mix(in srgb, var(--l1, #ff4f7b) 30%, var(--fg)); }
+  .t:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .t:visited { color: color-mix(in srgb, var(--l3, #c86bff) 40%, var(--fg)); }
+  .s { margin-top: 4px; font-size: 14.5px; color: color-mix(in srgb, var(--fg) 80%, transparent); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .s mark { background: none; color: var(--fg); font-weight: 600; }
+  .ops { position: absolute; right: 10px; top: 10px; display: none; gap: 2px; }
+  .r:hover .ops { display: flex; }
+  .ops button { height: 28px; padding: 0 9px; border-radius: 9px; font-size: 12px; color: var(--fg-dim); background: var(--card); border: 1px solid var(--hover); }
+  .ops button:hover { color: var(--fg); }
+  .boosted .u::after { content: "★"; color: var(--l1, #ff4f7b); font-size: 11px; }
+  #more { height: 60px; display: grid; place-items: center; color: var(--fg-dim); font-size: 13px; }
+  .empty { padding: 40px 0; color: var(--fg-dim); font-size: 15px; }
+  .empty b { color: var(--fg); display: block; font-size: 18px; margin-bottom: 6px; }
+
+  /* squelettes pendant le chargement */
+  .sk { padding: 14px 0 18px; }
+  .sk i { display: block; height: 12px; border-radius: 6px; background: var(--hover); margin-top: 10px; animation: sk 1.1s ease-in-out infinite alternate; }
+  .sk i:nth-child(1) { width: 30%; } .sk i:nth-child(2) { width: 62%; height: 16px; } .sk i:nth-child(3) { width: 92%; } .sk i:nth-child(4) { width: 75%; }
+  @keyframes sk { to { opacity: .45; } }
+
+  /* ------------------------------------------------ cartes en verre (IA, Wikipédia) */
+  .card { border-radius: 22px; padding: 18px 20px; background: var(--card); border: 1px solid var(--glass-border);
+    box-shadow: 0 16px 40px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.08); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+  #ai { margin-bottom: 18px; }
+  #ai[hidden] { display: none; }
+  .ai-h { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14.5px; }
+  .ai-h svg { width: 18px; height: 18px; color: var(--l1, #ff4f7b); }
+  .ai-h small { font-weight: 400; color: var(--fg-dim); font-size: 12.5px; margin-left: auto; }
+  .ai-t { margin-top: 10px; font-size: 14.5px; line-height: 1.55; user-select: text; }
+  .ai-t p + p, .ai-t ul { margin-top: 8px; } .ai-t ul { padding-left: 20px; }
+  .ai-t a.cite { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; margin: 0 1px; border-radius: 6px; font-size: 11px; font-weight: 700;
+    vertical-align: 2px; background: color-mix(in srgb, var(--l1, #ff4f7b) 28%, transparent); }
+  .ai-go { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 18px; font-size: 13.5px; font-weight: 600;
+    background: var(--glass); border: 1px solid var(--glass-border); margin-bottom: 14px; }
+  .ai-go:hover { background: var(--hover); }
+  .ai-go svg { width: 17px; height: 17px; color: var(--l1, #ff4f7b); }
+  .dots::after { content: "…"; animation: dots 1s steps(3) infinite; display: inline-block; width: 1em; overflow: hidden; vertical-align: bottom; }
+  @keyframes dots { from { width: 0; } }
+  .wiki img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 14px; margin-bottom: 14px; background: var(--hover); }
+  .wiki h3 { font-size: 21px; font-weight: 600; }
+  .wiki .d { color: var(--fg-dim); font-size: 13px; margin-top: 2px; }
+  .wiki p { margin-top: 10px; font-size: 14px; line-height: 1.55; user-select: text; }
+  .wiki a.src { display: inline-flex; margin-top: 12px; font-size: 13px; font-weight: 600; color: color-mix(in srgb, var(--l1, #ff4f7b) 35%, var(--fg)); }
+
+  /* ------------------------------------------------ images, actualités, vidéos */
+  #results.grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  #results.grid::after { content: ""; flex-grow: 999; }
+  main.wide #col { max-width: none; }
+  .im { position: relative; height: 190px; border-radius: 14px; overflow: hidden; background: var(--glass); cursor: zoom-in; content-visibility: auto; contain-intrinsic-size: auto 190px; }
+  .im img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .im span { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 10px 7px; font-size: 12px; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.7)); opacity: 0; transition: opacity .15s;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .im:hover span { opacity: 1; }
+  .nw { display: flex; gap: 16px; }
+  .nw .th { width: 132px; height: 88px; border-radius: 12px; object-fit: cover; flex: none; background: var(--hover); }
+  .vd { width: calc(33.33% - 6px); min-width: 200px; flex-grow: 1; border-radius: 16px; overflow: hidden; background: var(--glass); border: 1px solid var(--hover); content-visibility: auto; contain-intrinsic-size: auto 250px; }
+  .vd:hover { border-color: var(--glass-border); }
+  .vd .pic { position: relative; aspect-ratio: 16 / 9; background: var(--hover); }
+  .vd .pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .vd .pic i { position: absolute; right: 8px; bottom: 8px; font-style: normal; font-size: 12px; font-weight: 600; padding: 2px 7px; border-radius: 7px; background: rgba(0,0,0,.72); color: #fff; }
+  .vd .b { padding: 10px 12px 12px; }
+  .vd .b div { font-weight: 600; font-size: 14px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .vd .b small { display: block; margin-top: 4px; color: var(--fg-dim); font-size: 12.5px; }
+
+  /* visionneuse d'image */
+  #viewer { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(0,0,0,.72); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); padding: 40px; }
+  #viewer[hidden] { display: none; }
+  #viewer figure { max-width: min(1100px, 92vw); display: flex; flex-direction: column; gap: 14px; align-items: center; }
+  #viewer img { max-width: 100%; max-height: 74vh; border-radius: 14px; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+  #viewer figcaption { display: flex; gap: 10px; align-items: center; color: #fff; font-size: 14px; flex-wrap: wrap; justify-content: center; }
+  #viewer figcaption a { height: 34px; padding: 0 14px; border-radius: 17px; display: inline-flex; align-items: center; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.3); font-weight: 600; font-size: 13px; }
+
+  @media (max-width: 1100px) {
+    main { flex-direction: column-reverse; padding-left: clamp(16px, 4vw, 56px); gap: 0; }
+    #side { position: static; width: 100%; max-width: 680px; margin-bottom: 18px; }
+    nav { padding-left: 0; }
+  }
+  @media (max-width: 700px) { .brand { display: none; } }
+</style>
+</head>
+<body>
+  <div class="glow" aria-hidden="true"></div>
+  <header>
+    <div class="bar">
+      <a class="brand" href="newtab.html" title="Page d’accueil">Corrtex<svg viewBox="0 0 46 32"><path d="M4 28C14 26 26 18 38 6M30 5h9v9"/></svg></a>
+      <form id="sform" autocomplete="off">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/></svg>
+        <input id="q" type="text" spellcheck="false" placeholder="Rechercher avec Corrtex" aria-label="Recherche">
+        <button type="button" id="clear" class="icon-btn" title="Effacer" hidden><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </form>
+    </div>
+    <nav id="tabs">
+      <button data-t="web"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/></svg>Tout</button>
+      <button data-t="images"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M20.5 16l-5-5-8 8"/></svg>Images</button>
+      <button data-t="news"><svg viewBox="0 0 24 24"><path d="M5 5.5h11v13H6.5A1.5 1.5 0 0 1 5 17z"/><path d="M16 9h3v8a1.5 1.5 0 0 1-3 0M8 9h5M8 12h5M8 15h3"/></svg>Actualités</button>
+      <button data-t="videos"><svg viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="3"/><path d="M10.5 9.5l4 2.5-4 2.5z"/></svg>Vidéos</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="col">
+      <div id="ai" class="card" hidden></div>
+      <div id="status"></div>
+      <ol id="results"></ol>
+      <div id="more"></div>
+    </section>
+    <aside id="side"></aside>
+  </main>
+
+  <div id="viewer" hidden><figure><img alt=""><figcaption></figcaption></figure></div>
+
+  <script>
+  (function () {
+    const C = window.Corrtex;
+    const $ = (id) => document.getElementById(id);
+    const qIn = $('q'), list = $('results'), statusEl = $('status'), side = $('side'), aiBox = $('ai'), more = $('more');
+
+    // ------------------------------------------------------------ thème (comme la page d'accueil)
+    function theme() {
+      C.applyTheme();
+      const p = C.prefs();
+      const hex = /^#[0-9a-f]{6}$/i.test(p.light) ? p.light : '#ff4f7b';
+      const n = parseInt(hex.slice(1), 16), r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+      const s = d ? (l > .5 ? d / (2 - mx - mn) : d / (mx + mn)) : 0;
+      const h = !d ? 0 : mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      const hsl = (hh, ss, ll) => 'hsl(' + ((hh % 360) + 360) % 360 + ' ' + Math.round(ss * 100) + '% ' + Math.round(ll * 100) + '%)';
+      const st = document.documentElement.style;
+      st.setProperty('--l1', hsl(h * 60, s, l));
+      st.setProperty('--l3', hsl(h * 60 - 42, s * .9, Math.max(.35, l - .05)));
+      st.setProperty('--intensity', p.lightIntensity);
+      document.documentElement.classList.toggle('light-off', !p.lightOn);
+    }
+    theme();
+    window.addEventListener('corrtex-prefs', theme);
+    window.addEventListener('storage', (e) => { if (e.key === 'corrtex.prefs') theme(); });
+
+    // ------------------------------------------------------------ outils
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+    const safeUrl = (u) => (/^https?:\/\//i.test(u || '') ? u : '');
+    const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    const html = (t) => new DOMParser().parseFromString(t, 'text/html');
+    function fetchSrc(source, page, form) {
+      return C.invoke ? window.__TAURI__.core.invoke('search_fetch', { source, q: state.q, page: page || 1, form: form || null }) : Promise.reject('hors Corrtex');
+    }
+    const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
+    const listOf = (k) => (C.load(k, []) || []).map((s) => String(s).toLowerCase().replace(/^www\./, '')).filter(Boolean);
+    const matchHost = (host, arr) => arr.some((h) => host === h || host.endsWith('.' + h));
+
+    // ------------------------------------------------------------ lecture des moteurs
+    function parseDDG(t) {
+      const d = html(t);
+      if (d.querySelector('.anomaly-modal, #challenge-form, .challenge-form')) throw 'DuckDuckGo demande une vérification';
+      const out = [];
+      d.querySelectorAll('.result').forEach((r) => {
+        if (/result--ad/.test(r.className)) return;
+        const a = r.querySelector('a.result__a');
+        if (!a) return;
+        let u = a.getAttribute('href') || '';
+        const m = u.match(/[?&]uddg=([^&]+)/);
+        if (m) { try { u = decodeURIComponent(m[1]); } catch (e) {} }
+        if (u.startsWith('//')) u = 'https:' + u;
+        if (!safeUrl(u) || /duckduckgo\.com\/(y\.js|l\/)/.test(u)) return;
+        out.push({ url: u, title: clean(a.textContent), snippet: clean((r.querySelector('.result__snippet') || {}).textContent) });
+      });
+      // formulaire « page suivante » (le dernier qui contient la position s)
+      let form = '';
+      const forms = [...d.querySelectorAll('form')].filter((f) => f.querySelector('input[name="s"]') && f.querySelector('input[name="q"]'));
+      const f = forms[forms.length - 1];
+      if (f) form = new URLSearchParams([...f.querySelectorAll('input[name]')].filter((i) => i.type !== 'submit').map((i) => [i.name, i.value])).toString();
+      return { items: out, form };
+    }
+    function parseMojeek(t) {
+      const d = html(t), out = [];
+      d.querySelectorAll('ul.results-standard > li, .results-standard li').forEach((li) => {
+        const a = li.querySelector('h2 a, a.title');
+        if (!a) return;
+        const u = a.getAttribute('href') || '';
+        if (!safeUrl(u)) return;
+        out.push({ url: u, title: clean(a.textContent), snippet: clean((li.querySelector('p.s') || li.querySelector('p') || {}).textContent) });
+      });
+      return { items: out };
+    }
+    function parseMarginalia(t) {
+      const j = JSON.parse(t);
+      return { items: (j.results || []).map((r) => ({ url: r.url, title: clean(r.title), snippet: clean(r.description) })).filter((r) => safeUrl(r.url)) };
+    }
+    const PARSE = { ddg: parseDDG, mojeek: parseMojeek, marginalia: parseMarginalia };
+    const NAME = { ddg: 'DuckDuckGo', mojeek: 'Mojeek', marginalia: 'Marginalia' };
+    const WEIGHT = { ddg: 1, mojeek: 0.72, marginalia: 0.3 };
+
+    // ------------------------------------------------------------ fusion et classement
+    function keyOf(u) {
+      try {
+        const x = new URL(u);
+        const sp = [...x.searchParams].filter(([k]) => !/^(utm_|ref$|ref_|fbclid|gclid|msclkid|srsltid)/i.test(k));
+        return x.hostname.replace(/^www\./, '') + x.pathname.replace(/\/+$/, '').replace(/\/index\.(html?|php)$/, '') + (sp.length ? '?' + new URLSearchParams(sp) : '');
+      } catch (e) { return u; }
+    }
+    function merge(src, items, page) {
+      items.forEach((it, i) => {
+        const k = keyOf(it.url);
+        let m = state.map.get(k);
+        if (!m) { m = { url: it.url, title: it.title, snippet: it.snippet, srcs: [], score: 0, page }; state.map.set(k, m); }
+        if (m.srcs.indexOf(src) < 0) m.srcs.push(src);
+        // rang réciproque : un résultat présent chez plusieurs moteurs remonte
+        m.score += WEIGHT[src] / (i + 3 + (page - 1) * 10);
+        if (src === 'ddg' && it.title) m.title = it.title;
+        if ((it.snippet || '').length > (m.snippet || '').length * 1.3) m.snippet = it.snippet;
+        if (!m.title) m.title = it.title;
+      });
+    }
+    function ranked(page) {
+      const hide = listOf('searchHide'), boost = listOf('searchBoost');
+      const seenHost = {};
+      return [...state.map.values()]
+        .filter((m) => m.page === page && !state.shown.has(keyOf(m.url)))
+        .map((m) => { const h = hostOf(m.url); m.host = h; m.boost = matchHost(h, boost); return m; })
+        .filter((m) => !matchHost(m.host, hide))
+        .sort((a, b) => (b.score + (b.boost ? 1 : 0)) - (a.score + (a.boost ? 1 : 0)))
+        // pas plus de deux résultats d'affilée du même site en tête
+        .map((m) => { const n = seenHost[m.host] = (seenHost[m.host] || 0) + 1; m.adj = (m.score + (m.boost ? 1 : 0)) * Math.pow(0.8, Math.max(0, n - 2)); return m; })
+        .sort((a, b) => b.adj - a.adj);
+    }
+
+    // ------------------------------------------------------------ affichage
+    const words = () => norm(state.q).split(' ').filter((w) => w.length > 2);
+    function highlight(text) {
+      const ws = words();
+      let h = esc(text);
+      if (!ws.length) return h;
+      const re = new RegExp('(^|[^\\p{L}\\p{N}])(' + ws.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')', 'giu');
+      // les accents du texte ne sont pas retirés : on surligne ce qui correspond exactement
+      return h.replace(re, '$1<mark>$2</mark>');
+    }
+    function crumbs(u) {
+      try {
+        const x = new URL(u);
+        const parts = decodeURIComponent(x.pathname).split('/').filter(Boolean).slice(0, 3).map((p) => p.replace(/\.(html?|php|aspx?)$/, '').replace(/[-_]+/g, ' ').slice(0, 28));
+        return '<b>' + esc(x.hostname.replace(/^www\./, '')) + '</b>' + (parts.length ? ' › ' + esc(parts.join(' › ')) : '');
+      } catch (e) { return esc(u); }
+    }
+    function itemHtml(m, idx) {
+      const u = safeUrl(m.url);
+      return '<li class="r' + (m.boost ? ' boosted' : '') + '" data-i="' + idx + '" data-host="' + esc(m.host) + '">' +
+        '<div class="u"><img class="fav" loading="lazy" decoding="async" alt="" src="' + esc(C.favicon(u, 32)) + '" onerror="this.style.visibility=\'hidden\'"><span>' + crumbs(u) + '</span></div>' +
+        '<a class="t" href="' + esc(u) + '">' + esc(m.title || hostOf(u)) + '</a>' +
+        (m.snippet ? '<p class="s">' + highlight(m.snippet) + '</p>' : '') +
+        '<div class="ops"><button data-op="boost" title="Toujours remonter ce site">' + (m.boost ? 'Ne plus remonter' : 'Remonter') + '</button><button data-op="hide" title="Ne plus afficher ce site">Masquer</button></div></li>';
+    }
+    let flat = [];
+    function renderWeb(page, replace) {
+      // tout redessiner : toutes les pages déjà chargées, reclassées page par page
+      if (replace) { flat = []; state.shown = new Set(); }
+      const items = replace ? [].concat(...Array.from({ length: state.page }, (_, i) => ranked(i + 1))) : ranked(page);
+      const start = replace ? 0 : flat.length;
+      items.forEach((m) => { flat.push(m); state.shown.add(keyOf(m.url)); });
+      const htmlStr = items.map((m, i) => itemHtml(m, start + i)).join('');
+      if (replace) list.innerHTML = htmlStr; else list.insertAdjacentHTML('beforeend', htmlStr);
+      return items.length;
+    }
+    function skeleton(n) { list.className = ''; list.innerHTML = '<li class="sk"><i></i><i></i><i></i><i></i></li>'.repeat(n); }
+    function setStatus() {
+      const ok = state.srcOk.map((s) => NAME[s] || s);
+      const parts = [];
+      if (state.kind === 'web' && flat.length) parts.push(flat.length + ' résultats');
+      if (state.ms) parts.push((state.ms / 1000).toFixed(2).replace('.', ',') + ' s');
+      if (ok.length) parts.push('via ' + ok.join(', '));
+      let h = esc(parts.join(' · '));
+      if (state.errs.length) h += ' <span class="err">' + esc(state.errs.join(' · ')) + '</span> <button id="retry">Réessayer</button>';
+      statusEl.innerHTML = h;
+      const r = $('retry');
+      if (r) r.onclick = () => run(true);
+    }
+    function empty(title, text) { list.className = ''; list.innerHTML = '<li class="empty"><b>' + esc(title) + '</b>' + esc(text) + '</li>'; }
+
+    // ------------------------------------------------------------ état d'une recherche
+    let state = null, seq = 0;
+    function fresh(q, kind) {
+      return { id: ++seq, q, kind, page: 1, map: new Map(), shown: new Set(), srcOk: [], errs: [], form: '', ms: 0, done: false, loading: false, more: true, started: performance.now() };
+    }
+
+    async function runWeb(st) {
+      skeleton(5);
+      let rendered = false, moved = false;
+      const onMove = () => { moved = true; };
+      window.addEventListener('scroll', onMove, { once: true, passive: true });
+      const draw = () => {
+        if (st !== state) return;
+        if (!rendered) { rendered = true; renderWeb(1, true); st.ms = performance.now() - st.started; }
+        else if (!moved && scrollY < 30) renderWeb(1, true);   // personne n'a encore lu : on reclasse tout
+        else renderWeb(1, false);                             // sinon on ajoute à la fin, sans bousculer
+        setStatus();
+        if (state.kind === 'web' && flat.length && C.load('searchAI', false) && !aiBox.dataset.q) askAI();
+      };
+      // DuckDuckGo est la source principale : on l'attend un peu avant d'afficher les autres
+      const t0 = setTimeout(() => { if (st.srcOk.length && !rendered) draw(); }, 650);
+      const one = (src) => fetchSrc(src, 1).then((t) => {
+        if (st !== state) return;
+        const r = PARSE[src](t);
+        if (src === 'ddg') st.form = r.form || '';
+        if (!r.items.length && src !== 'marginalia') st.errs.push(NAME[src] + ' : aucun résultat');
+        else if (r.items.length) st.srcOk.push(src);
+        merge(src, r.items, 1);
+        if (src === 'ddg' || rendered || performance.now() - st.started > 650) draw();
+      }).catch((e) => { if (st === state && src !== 'marginalia') { st.errs.push(String(e)); if (rendered) setStatus(); } });
+      await Promise.all(['ddg', 'mojeek', 'marginalia'].map(one));
+      clearTimeout(t0);
+      if (st !== state) return;
+      if (!rendered) draw();
+      if (!flat.length) empty('Aucun résultat', st.errs.length ? ' Les moteurs n’ont pas répondu. Vérifiez la connexion puis réessayez.' : ' Essayez avec d’autres mots ou une orthographe différente.');
+      st.done = true;
+      setStatus();
+      watchMore();
+    }
+
+    async function moreWeb(st) {
+      const page = st.page + 1;
+      const tasks = [];
+      if (st.form) tasks.push(fetchSrc('ddg', page, st.form).then((t) => { const r = parseDDG(t); st.form = r.form || ''; merge('ddg', r.items, page); }).catch(() => { st.form = ''; }));
+      tasks.push(fetchSrc('mojeek', page).then((t) => merge('mojeek', parseMojeek(t).items, page)).catch(() => {}));
+      tasks.push(fetchSrc('marginalia', page).then((t) => merge('marginalia', parseMarginalia(t).items, page)).catch(() => {}));
+      await Promise.all(tasks);
+      if (st !== state) return;
+      st.page = page;
+      const n = renderWeb(page, false);
+      if (!n || page >= 6) st.more = false;
+      setStatus();
+    }
+
+    // images, actualités, vidéos (DuckDuckGo)
+    const VERT = {
+      images: (r) => {
+        const ratio = Math.min(Math.max((r.width || 4) / (r.height || 3), 0.5), 2.4);
+        return '<a class="im" href="' + esc(safeUrl(r.url)) + '" data-img="' + esc(safeUrl(r.image)) + '" data-title="' + esc(r.title) + '" style="flex:' + ratio.toFixed(2) + ' 1 ' + Math.round(ratio * 190) + 'px">' +
+          '<img loading="lazy" decoding="async" alt="" src="' + esc(safeUrl(r.thumbnail)) + '"><span>' + esc(r.title) + ' · ' + esc(hostOf(r.url)) + '</span></a>';
+      },
+      news: (r) => '<li class="r"><div class="nw"><div style="flex:1;min-width:0"><div class="u"><img class="fav" loading="lazy" alt="" src="' + esc(C.favicon(r.url, 32)) + '"><span><b>' + esc(r.source || hostOf(r.url)) + '</b> · ' + esc(r.relative_time || '') + '</span></div>' +
+        '<a class="t" href="' + esc(safeUrl(r.url)) + '">' + esc(clean(r.title)) + '</a><p class="s">' + highlight(clean(r.excerpt)) + '</p></div>' +
+        (safeUrl(r.image) ? '<img class="th" loading="lazy" decoding="async" alt="" src="' + esc(r.image) + '" onerror="this.remove()">' : '') + '</div></li>',
+      videos: (r) => {
+        const img = r.images && (r.images.medium || r.images.large || r.images.small);
+        const views = r.statistics && r.statistics.viewCount ? Intl.NumberFormat('fr-FR', { notation: 'compact' }).format(r.statistics.viewCount) + ' vues' : '';
+        const when = r.published ? new Date(r.published).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+        return '<a class="vd" href="' + esc(safeUrl(r.content)) + '"><div class="pic">' + (safeUrl(img) ? '<img loading="lazy" decoding="async" alt="" src="' + esc(img) + '">' : '') + (r.duration ? '<i>' + esc(r.duration) + '</i>' : '') + '</div>' +
+          '<div class="b"><div>' + esc(clean(r.title)) + '</div><small>' + esc([r.uploader || r.publisher, views, when].filter(Boolean).join(' · ')) + '</small></div></a>';
+      },
+    };
+    async function runVertical(st, page) {
+      if (page === 1) { skeleton(4); list.className = st.kind === 'news' ? '' : 'grid'; }
+      try {
+        const j = JSON.parse(await fetchSrc(st.kind, page));
+        if (st !== state) return;
+        const res = (j.results || []).filter((r) => !state.shown.has(r.url || r.content || r.image));
+        res.forEach((r) => state.shown.add(r.url || r.content || r.image));
+        if (page === 1) { list.className = st.kind === 'news' ? '' : 'grid'; list.innerHTML = ''; st.ms = performance.now() - st.started; st.srcOk = ['ddg']; }
+        list.insertAdjacentHTML('beforeend', res.map(VERT[st.kind]).join(''));
+        if (!res.length) st.more = false;
+        if (page === 1 && !res.length) empty('Aucun résultat', ' Rien trouvé pour cette recherche.');
+        st.page = page;
+      } catch (e) {
+        if (st !== state) return;
+        st.more = false;
+        if (page === 1) { st.errs.push(String(e)); empty('Recherche indisponible', ' DuckDuckGo n’a pas répondu pour cet onglet. Réessayez dans un instant.'); }
+      }
+      st.done = true;
+      setStatus();
+      watchMore();
+    }
+
+    // défilement infini
+    let io = null;
+    function watchMore() {
+      if (!io) io = new IntersectionObserver((en) => {
+        if (!en[0].isIntersecting || !state || !state.done || state.loading || !state.more) return;
+        const st = state;
+        st.loading = true;
+        more.textContent = 'Chargement…';
+        (st.kind === 'web' ? moreWeb(st) : runVertical(st, st.page + 1)).finally(() => { st.loading = false; more.textContent = st.more ? '' : (flat.length || st.kind !== 'web' ? 'Fin des résultats' : ''); });
+      }, { rootMargin: '900px' });
+      io.disconnect();
+      io.observe(more);
+    }
+
+    // ------------------------------------------------------------ fiche Wikipédia
+    function wiki(st) {
+      side.innerHTML = '';
+      fetchSrc('wiki', 1).then((t) => {
+        if (st !== state) return;
+        const p = ((JSON.parse(t).query || {}).pages || [])[0];
+        if (!p || !p.extract) return;
+        // la fiche n'apparaît que si elle parle bien de la recherche
+        const tq = norm(state.q).split(' ').filter(Boolean), tt = norm(p.title).split(' ').filter(Boolean);
+        const common = tt.filter((w) => tq.indexOf(w) >= 0).length;
+        if (!tt.length || common / tt.length < 0.6 || common / Math.max(tq.length, 1) < 0.34) return;
+        side.innerHTML = '<div class="card wiki">' + (p.thumbnail && safeUrl(p.thumbnail.source) ? '<img alt="" decoding="async" src="' + esc(p.thumbnail.source) + '">' : '') +
+          '<h3>' + esc(p.title) + '</h3>' + (p.description ? '<div class="d">' + esc(p.description) + '</div>' : '') +
+          '<p>' + esc(p.extract.length > 620 ? p.extract.slice(0, 600).replace(/\s\S*$/, '') + '…' : p.extract) + '</p>' +
+          '<a class="src" href="' + esc(safeUrl(p.fullurl)) + '">Lire sur Wikipédia ›</a></div>';
+      }).catch(() => {});
+    }
+
+    // ------------------------------------------------------------ réponse de l'IA (page d'IA cachée, sans clé)
+    let aiReq = '';
+    window.__corrtexShopAI = (req, text, done, error) => {
+      if (req !== aiReq) return;
+      const body = aiBox.querySelector('.ai-t');
+      if (text) body.innerHTML = aiFormat(text);
+      if (done || error) {
+        aiReq = '';
+        aiBox.querySelector('.ai-h small').textContent = error && !text ? 'pas de réponse : êtes-vous connecté au service d’IA du panneau ?' : 'à partir des résultats ci-dessous';
+        if (error && !text) body.textContent = '';
+      }
+    };
+    function aiFormat(t) {
+      const lines = esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').split(/\n+/);
+      let out = '', ul = false;
+      for (const l of lines) {
+        const li = l.match(/^\s*[-*•]\s+(.*)/);
+        if (li) { if (!ul) { out += '<ul>'; ul = true; } out += '<li>' + li[1] + '</li>'; continue; }
+        if (ul) { out += '</ul>'; ul = false; }
+        if (l.trim()) out += '<p>' + l + '</p>';
+      }
+      if (ul) out += '</ul>';
+      return out.replace(/\[(\d{1,2})\]/g, (m, n) => { const r = aiSources[+n - 1]; return r ? '<a class="cite" href="' + esc(safeUrl(r.url)) + '" title="' + esc(r.title) + '">' + n + '</a>' : m; });
+    }
+    let aiSources = [];
+    function askAI() {
+      aiSources = flat.slice(0, 8);
+      if (!aiSources.length) return;
+      aiBox.dataset.q = state.q;
+      aiBox.hidden = false;
+      aiBox.innerHTML = '<div class="ai-h"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>Réponse de l’IA<small class="dots">rédaction</small></div><div class="ai-t"></div>';
+      aiReq = 'se' + Date.now().toString(36);
+      const src = aiSources.map((r, i) => '[' + (i + 1) + '] ' + r.title + ' — ' + r.url + '\n' + (r.snippet || '')).join('\n\n');
+      const prompt = 'Question posée à un moteur de recherche : « ' + state.q + ' »\n\nVoici les premiers résultats :\n\n' + src +
+        '\n\nRéponds directement à la question en français, en 3 à 6 phrases claires (ou une courte liste si c’est plus lisible), à partir de ces résultats et de tes connaissances. ' +
+        'Cite les sources utilisées avec leur numéro entre crochets, par exemple [2]. Pas d’introduction ni de formule de politesse.';
+      window.__TAURI__.core.invoke('shop_ask_ai', { prompt, req: aiReq }).catch(() => { aiBox.querySelector('.ai-h small').textContent = 'IA indisponible'; });
+    }
+    function aiButton() {
+      aiBox.hidden = false;
+      delete aiBox.dataset.q;
+      aiBox.className = '';
+      aiBox.innerHTML = '<button class="ai-go"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>Réponse de l’IA</button>';
+      aiBox.querySelector('button').onclick = () => { aiBox.className = 'card'; askAI(); };
+    }
+
+    // ------------------------------------------------------------ « bangs » à la DuckDuckGo (!g, !yt…)
+    function bang(q) {
+      const m = q.match(/(?:^|\s)!([a-z]{1,6})(?=\s|$)/i);
+      if (!m) return null;
+      const rest = q.replace(m[0], ' ').trim();
+      return C.bangUrl ? C.bangUrl(m[1].toLowerCase(), rest) : null;
+    }
+
+    // ------------------------------------------------------------ lancement
+    function readHash() {
+      const p = new URLSearchParams(location.hash.slice(1));
+      return { q: clean(p.get('q') || ''), kind: ['web', 'images', 'news', 'videos'].indexOf(p.get('t')) >= 0 ? p.get('t') : 'web' };
+    }
+    function run(force) {
+      const { q, kind } = readHash();
+      if (!q) { qIn.focus(); empty('Recherche Corrtex', ' Tapez votre recherche ci-dessus.'); return; }
+      const b = bang(q);
+      if (b) { location.replace(b); return; }
+      if (!force && state && state.q === q && state.kind === kind) return;
+      qIn.value = q;
+      $('clear').hidden = !q;
+      document.title = q + ' – Recherche Corrtex';
+      document.querySelectorAll('#tabs button').forEach((x) => x.classList.toggle('on', x.dataset.t === kind));
+      try { window.__TAURI__.core.invoke('search_page', { hash: location.hash }); } catch (e) {}
+      state = fresh(q, kind);
+      flat = [];
+      more.textContent = '';
+      aiReq = '';
+      statusEl.textContent = '';
+      scrollTo(0, 0);
+      document.querySelector('main').classList.toggle('wide', kind === 'images' || kind === 'videos');
+      if (kind === 'web') {
+        if (C.load('searchAI', false)) { aiBox.hidden = true; aiBox.className = 'card'; delete aiBox.dataset.q; } else aiButton();
+        wiki(state);
+        runWeb(state);
+      } else {
+        aiBox.hidden = true;
+        side.innerHTML = '';
+        runVertical(state, 1);
+      }
+    }
+    function go(q, kind) {
+      q = clean(q);
+      if (!q) return;
+      const b = bang(q);
+      if (b) { location.href = b; return; }
+      const h = '#q=' + encodeURIComponent(q) + (kind && kind !== 'web' ? '&t=' + kind : '');
+      if (location.hash === h) run(true); else location.hash = h;
+    }
+    window.addEventListener('hashchange', () => run());
+    $('sform').addEventListener('submit', (e) => { e.preventDefault(); qIn.blur(); go(qIn.value, state ? state.kind : 'web'); });
+    qIn.addEventListener('input', () => { $('clear').hidden = !qIn.value; });
+    $('clear').onclick = () => { qIn.value = ''; $('clear').hidden = true; qIn.focus(); };
+    $('tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b && state) go(state.q, b.dataset.t); });
+
+    // ------------------------------------------------------------ clics : Ctrl+clic / clic molette = nouvel onglet
+    function newTab(e, url) {
+      if (!(e.ctrlKey || e.metaKey || e.button === 1) || !safeUrl(url)) return false;
+      e.preventDefault();
+      C.invoke('new_tab', { url });
+      return true;
+    }
+    document.addEventListener('click', (e) => {
+      const op = e.target.closest('.ops button');
+      if (op) {
+        e.preventDefault();
+        const host = op.closest('.r').dataset.host;
+        const key = op.dataset.op === 'hide' ? 'searchHide' : 'searchBoost';
+        const cur = C.load(key, []) || [];
+        C.save(key, cur.indexOf(host) >= 0 ? cur.filter((h) => h !== host) : cur.concat([host]));
+        if (state && state.kind === 'web') renderWeb(1, true);
+        kb = -1;
+        return;
+      }
+      const im = e.target.closest('.im');
+      if (im && !(e.ctrlKey || e.metaKey)) { e.preventDefault(); view(im); return; }
+      const a = e.target.closest('a[href]');
+      if (a) newTab(e, a.href);
+    });
+    document.addEventListener('auxclick', (e) => { const a = e.target.closest('a[href]'); if (a && e.button === 1) newTab(e, a.href); });
+
+    // visionneuse d'images
+    const viewer = $('viewer');
+    function view(a) {
+      viewer.querySelector('img').src = a.dataset.img || a.querySelector('img').src;
+      viewer.querySelector('figcaption').innerHTML = '<span>' + esc(a.dataset.title) + '</span><a href="' + esc(a.href) + '">Voir la page</a><a href="' + esc(a.dataset.img) + '">Ouvrir l’image</a>';
+      viewer.hidden = false;
+    }
+    viewer.addEventListener('click', (e) => { if (!e.target.closest('a')) viewer.hidden = true; });
+
+    // ------------------------------------------------------------ clavier : / pour chercher, ↑ ↓ pour parcourir, Entrée pour ouvrir
+    let kb = -1;
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { if (!viewer.hidden) viewer.hidden = true; else qIn.blur(); return; }
+      if (document.activeElement === qIn) return;
+      if (e.key === '/' ) { e.preventDefault(); qIn.focus(); qIn.select(); return; }
+      const rows = list.querySelectorAll('.r');
+      if (!rows.length || !/^(ArrowDown|ArrowUp|Enter)$/.test(e.key)) return;
+      if (e.key === 'Enter') { const a = rows[kb] && rows[kb].querySelector('a.t'); if (a) { if (e.ctrlKey) C.invoke('new_tab', { url: a.href }); else location.href = a.href; } return; }
+      e.preventDefault();
+      if (rows[kb]) rows[kb].classList.remove('kb');
+      kb = Math.max(0, Math.min(rows.length - 1, kb + (e.key === 'ArrowDown' ? 1 : -1)));
+      rows[kb].classList.add('kb');
+      rows[kb].scrollIntoView({ block: 'nearest' });
+    });
+
+    run(true);
+  })();
+  </script>
+</body>
+</html>

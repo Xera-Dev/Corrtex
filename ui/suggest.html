@@ -88,7 +88,8 @@
           }
           el.addEventListener('mousedown', (e) => {
             e.preventDefault();
-            const url = it.type === 'url' || it.type === 'history' ? it.url : 'https://www.google.com/search?q=' + encodeURIComponent(it.text);
+            const url = it.type === 'url' || it.type === 'history' ? it.url : window.Corrtex.searchUrl(it.text);
+            C.prefetchSearch(url);
             C.invoke('navigate', { url });
             C.invoke('suggest_close');
           });

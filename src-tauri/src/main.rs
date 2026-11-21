@@ -11,6 +11,7 @@
 
 mod extensions;
 
+mod search;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -1308,6 +1309,10 @@ fn spawn_tab_view(app: &AppHandle, id: u32) -> Result<(), String> {
                             None if is_internal(&url) => String::new(),
                             None => url.clone(),
                         };
+                        // page de résultats du moteur Corrtex : gardée pour la session et la barre d'adresse
+                        if let Some(u) = tauri::Url::parse(&url).ok().filter(|u| is_internal(&url) && u.path().ends_with("/search.html")) {
+                            t.page = format!("search.html#{}", u.fragment().unwrap_or(""));
+                        }
                         t.loading = !finished;
                         if t.loading {
                             t.favicon.clear();
@@ -2093,6 +2098,18 @@ fn fetch_shop_page(url: &str, extra: &[String]) -> Result<String, String> {
 async fn shop_fetch(app: AppHandle, url: String) -> Result<String, String> {
     let extra: Vec<String> = state(&app).settings.shop_sites.iter().filter(|s| s.on).filter_map(|s| shop_site_host(&s.search)).collect();
     tauri::async_runtime::spawn_blocking(move || fetch_shop_page(&url, &extra)).await.map_err(|e| e.to_string())?
+}
+
+/// Page de résultats du moteur Corrtex : la recherche affichée (pour la barre d'adresse et la session).
+#[tauri::command]
+async fn search_page(app: AppHandle, webview: Webview, hash: String) {
+    let Some(id) = webview.label().strip_prefix("tab-").and_then(|n| n.parse::<u32>().ok()) else { return };
+    let hash: String = hash.trim_start_matches('#').chars().take(800).collect();
+    if let Some(t) = state(&app).tabs.get_mut(&id) {
+        t.url.clear();
+        t.page = format!("search.html#{hash}");
+    }
+    broadcast(&app);
 }
 
 /// Boutiques de l'agent d'achat (réglages).
@@ -3335,7 +3352,7 @@ fn save_history(app: &AppHandle) {
 
 /// Une page web a fini de charger : visite ajoutée à l'historique.
 fn record_visit(app: &AppHandle, url: &str) {
-    if !(url.starts_with("http://") || url.starts_with("https://")) {
+    if !(url.starts_with("http://") || url.starts_with("https://")) || is_internal(url) {
         return;
     }
     let mut b = state(app);
@@ -6714,6 +6731,10 @@ fn main() {
             ai_summarize,
             ai_page_compare,
             shop_sites_get,
+            search::search_fetch,
+            search::search_prefetch,
+            search::search_warm,
+            search_page,
             shop_sites_set,
             shop_sites_reset,
             ai_compare,

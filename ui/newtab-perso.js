@@ -425,6 +425,26 @@
     });
   })();
 
+  // ---------------------------------------------------------------- moteur de recherche
+  function renderEngine() {
+    const box = $('set-engine');
+    box.replaceChildren();
+    const cur = C.engine();
+    for (const e of C.engines) {
+      const b = el('button', 'chip' + (e.id === cur ? ' sel' : ''), e.name);
+      b.onclick = () => { C.save('engine', e.id); renderEngine(); if (e.id === 'corrtex') C.invoke('search_warm'); };
+      box.append(b);
+    }
+    $('set-search-ai').checked = !!C.load('searchAI', false);
+    $('set-search-boost').value = (C.load('searchBoost', []) || []).join('\n');
+    $('set-search-hide').value = (C.load('searchHide', []) || []).join('\n');
+  }
+  const siteList = (v) => [...new Set(v.split(/[\s,;]+/).map((x) => x.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '')).filter((x) => /\./.test(x)))].slice(0, 200);
+  $('set-search-ai').addEventListener('change', (e) => C.save('searchAI', e.target.checked));
+  $('set-search-boost').addEventListener('change', (e) => { C.save('searchBoost', siteList(e.target.value)); renderEngine(); });
+  $('set-search-hide').addEventListener('change', (e) => { C.save('searchHide', siteList(e.target.value)); renderEngine(); });
+  renderEngine();
+
   // ---------------------------------------------------------------- boutiques de l'agent d'achat
   let shopSites = [];
   const shopHost = (u) => { try { return new URL(u.replace('{q}', 'x')).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };

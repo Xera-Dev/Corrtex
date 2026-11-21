@@ -60,14 +60,68 @@
       T.event.listen(event, (e) => cb(e.payload));
     },
 
-    // Transforme ce que l'utilisateur tape en adresse : URL directe ou recherche Google.
+    // Transforme ce que l'utilisateur tape en adresse : URL directe ou recherche (moteur choisi).
     toUrl(input) {
       const s = (input || '').trim();
       if (!s) return null;
       if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s) || /^(about|data|file|mailto):/i.test(s)) return s;
       if (/^(localhost|\d{1,3}(\.\d{1,3}){3}|\[[0-9a-f:]+\])(:\d+)?(\/.*)?$/i.test(s)) return 'http://' + s;
       if (!/\s/.test(s) && /^[^\s/]+\.[a-z]{2,}(:\d+)?([/?#].*)?$/i.test(s)) return 'https://' + s;
-      return 'https://www.google.com/search?q=' + encodeURIComponent(s);
+      return api.searchUrl(s);
+    },
+
+    // ------------------------------------------------ moteur de recherche
+    engines: [
+      { id: 'corrtex', name: 'Corrtex' },
+      { id: 'google', name: 'Google', url: 'https://www.google.com/search?q=' },
+      { id: 'ddg', name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=' },
+      { id: 'bing', name: 'Bing', url: 'https://www.bing.com/search?q=' },
+      { id: 'qwant', name: 'Qwant', url: 'https://www.qwant.com/?q=' },
+      { id: 'ecosia', name: 'Ecosia', url: 'https://www.ecosia.org/search?q=' }
+    ],
+    engine() { const e = api.load('engine', 'corrtex'); return api.engines.some((x) => x.id === e) ? e : 'corrtex'; },
+    // adresse d'une page de Corrtex (même origine que la page qui demande)
+    pageUrl(page) { return location.href.replace(/[?#].*$/, '').replace(/[^/]*$/, '') + page; },
+    // raccourcis « ! » à la DuckDuckGo : !g, !yt, !w, !a, !m, !i, !n, !v…
+    bangs: {
+      g: 'https://www.google.com/search?q=', yt: 'https://www.youtube.com/results?search_query=', w: 'https://fr.wikipedia.org/w/index.php?search=',
+      a: 'https://www.amazon.fr/s?k=', m: 'https://www.google.com/maps/search/', gm: 'https://www.google.com/maps/search/', b: 'https://www.bing.com/search?q=',
+      ddg: 'https://duckduckgo.com/?q=', gh: 'https://github.com/search?q=', r: 'https://www.reddit.com/search/?q=', tw: 'https://x.com/search?q=',
+      lbc: 'https://www.leboncoin.fr/recherche?text=', imdb: 'https://www.imdb.com/find/?q=', t: 'https://translate.google.com/?sl=auto&tl=fr&text=',
+      wr: 'https://www.wordreference.com/fren/', so: 'https://stackoverflow.com/search?q=', sp: 'https://open.spotify.com/search/'
+    },
+    bangUrl(key, rest) {
+      const vert = { i: 'images', n: 'news', v: 'videos' }[key];
+      if (vert) return api.pageUrl('search.html') + '#q=' + encodeURIComponent(rest) + '&t=' + vert;
+      const base = api.bangs[key];
+      if (!base) return null;
+      if (!rest) { try { return new URL(base).origin + '/'; } catch (e) { return null; } }
+      return base + encodeURIComponent(rest);
+    },
+    searchUrl(q, engine) {
+      const m = q.match(/(?:^|\s)!([a-z]{1,6})(?=\s|$)/i);
+      if (m) { const b = api.bangUrl(m[1].toLowerCase(), q.replace(m[0], ' ').trim()); if (b) return b; }
+      const e = api.engines.find((x) => x.id === (engine || api.engine()));
+      if (e && e.url) return e.url + encodeURIComponent(q);
+      return api.pageUrl('search.html') + '#q=' + encodeURIComponent(q);
+    },
+    // adresse d'une page de recherche (Corrtex ou moteur connu) → texte recherché, sinon null
+    searchQuery(url) {
+      try {
+        const u = new URL(url);
+        if (/\/search\.html$/.test(u.pathname)) return new URLSearchParams(u.hash.slice(1)).get('q');
+        if (/(^|\.)google\.[a-z.]+$/.test(u.hostname) && u.pathname === '/search') return u.searchParams.get('q');
+      } catch (e) {}
+      return null;
+    },
+    // lance la recherche Corrtex avant même que la page de résultats soit chargée
+    prefetchSearch(url) {
+      try {
+        const u = new URL(url);
+        if (!/\/search\.html$/.test(u.pathname)) return;
+        const p = new URLSearchParams(u.hash.slice(1));
+        if (p.get('q')) api.invoke('search_prefetch', { q: p.get('q'), kind: p.get('t') || 'web' });
+      } catch (e) {}
     },
 
     favicon(url, size) {
