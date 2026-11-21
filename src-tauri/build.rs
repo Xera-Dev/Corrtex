@@ -40,6 +40,7 @@ fn main() {
             "win_close",
             "toggle_fullscreen",
             "ai_summarize",
+            "ai_page_compare",
             "ai_compare",
             "set_aibar_extra",
             "set_ai_memory",

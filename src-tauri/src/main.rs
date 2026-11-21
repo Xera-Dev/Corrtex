@@ -2446,6 +2446,21 @@ fn try_finish_read(app: &AppHandle, req: u64, force: bool) {
 }
 
 /// Résumé de l'onglet actif (bouton de l'en-tête du panneau IA).
+/// « Comparer les articles de la page » : la page repère ses articles et demande à l'IA cachée
+#[tauri::command]
+async fn ai_page_compare(app: AppHandle, webview: Webview, needs: String) -> Result<(), String> {
+    let win = caller_win(&webview);
+    let id = state(&app).windows.get(&win).and_then(|w| w.active).ok_or("aucun onglet")?;
+    let url = state(&app).tabs.get(&id).map(|t| t.url.clone()).unwrap_or_default();
+    if !url.starts_with("http") {
+        return Err("pas de page web ouverte".into());
+    }
+    let wv = app.get_webview(&tab_label(id)).ok_or("onglet introuvable")?;
+    let needs: String = needs.chars().take(400).collect();
+    let arg = serde_json::to_string(&needs).unwrap_or_else(|_| "\"\"".into());
+    wv.eval(&format!("window.__corrtexPageCompare && window.__corrtexPageCompare({arg})")).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn ai_summarize(app: AppHandle, webview: Webview) -> Result<(), String> {
     let win = caller_win(&webview);
@@ -6365,6 +6380,23 @@ async fn tab_event(app: AppHandle, webview: Webview, kind: String, data: serde_j
                 }
             }
         }
+        "page_cmp_ai" => {
+            let take = |k: &str, n: usize| data.get(k).and_then(|v| v.as_str()).unwrap_or("").chars().take(n).collect::<String>();
+            let req: String = take("req", 30).chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+            let prompt = take("prompt", 12000);
+            if let Some(win) = win_of_tab(&app, id) {
+                let _ = quick_ask_to(&app, &win, id, req, prompt, Some("__corrtexPageCmpAI"));
+            }
+        }
+        "page_cmp_done" => {
+            let take = |k: &str, n: usize| data.get(k).and_then(|v| v.as_str()).unwrap_or("").chars().take(n).collect::<String>();
+            let private = win_of_tab(&app, id).and_then(|w| state(&app).windows.get(&w).map(|w| w.private)).unwrap_or(false);
+            if !private {
+                let url = state(&app).tabs.get(&id).map(|t| t.url.clone()).unwrap_or_default();
+                let goal = format!("Comparer les articles : {} ({})", take("needs", 300), take("title", 120));
+                agent_history_put(&app, serde_json::json!({ "id": now_secs() * 1000, "kind": "agent", "goal": goal, "answer": take("answer", 4000), "url": url, "time": now_secs() }));
+            }
+        }
         "agent_done" => {
             // réponse finale de l'agent de navigation : gardée dans l'historique de l'agent
             let goal = state(&app).agents.get(&id).map(|j| j.goal.clone()).unwrap_or_default();
@@ -6601,6 +6633,7 @@ fn main() {
             win_close,
             toggle_fullscreen,
             ai_summarize,
+            ai_page_compare,
             ai_compare,
             set_aibar_extra,
             set_ai_memory,

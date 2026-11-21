@@ -923,7 +923,7 @@
   // affiché. La recherche tourne dans un moteur caché de Corrtex : il envoie ici son état
   // (show), les boutons lui sont renvoyés (send 'shopping_action'). Il suit l'onglet affiché.
   (function () {
-    var host = null, root = null, last = null, mode = 'results', list = null, refineOpen = false, picked = {};
+    var host = null, root = null, last = null, mode = 'results', list = null, refineOpen = false, picked = {}, local = null;
     function E(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
     function ic(d) { return cxIcon(d); }
     var I = {
@@ -986,6 +986,9 @@
         '.tag.good { background: rgba(79,207,138,.16); color: ' + good + '; } .tag.warn { background: rgba(255,176,92,.16); color: ' + warn + '; }',
         '.spk { width: 104px; height: 24px; } .spk path { fill: none; stroke: ' + dim + '; stroke-width: 1.6; } .spk circle { fill: ' + fg + '; stroke: none; }',
         '.why { font-size: 12.5px; line-height: 1.4; opacity: .92; margin-top: 2px; }',
+        '.bdg { align-self: flex-start; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 9px; background: color-mix(in srgb, ' + ac + ' 26%, transparent); color: ' + fg + '; border: 1px solid color-mix(in srgb, ' + ac + ' 45%, transparent); }',
+        '.pc { display: flex; flex-direction: column; gap: 2px; font-size: 12px; line-height: 1.35; margin-top: 2px; }',
+        '.pc span { display: flex; gap: 6px; } .pc .p b { color: ' + good + '; } .pc .c b { color: ' + warn + '; } .pc b { flex: none; font-weight: 700; }',
         '.acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; align-items: center; }',
         '.btn { all: unset; box-sizing: border-box; height: 30px; padding: 0 13px; border-radius: 15px; font-weight: 600; font-size: 12.5px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: ' + fg + '; color: ' + btnFg + '; cursor: default; }',
         '.btn:hover { filter: brightness(.92); } .btn.gh { background: ' + glass + '; color: ' + fg + '; border: 1px solid ' + border + '; } .btn.gh:hover { background: ' + hover + '; filter: none; }',
@@ -1028,7 +1031,8 @@
       if (it.image) { var im = E('img'); im.src = it.image; im.alt = ''; im.onerror = function () { im.remove(); }; pic.append(im); }
       pic.onclick = function () { openUrl(it.url); };
       var b = E('div', 'cb');
-      var nm = E('div', 'nm', it.name); nm.title = 'Comparer les prix sur leDénicheur'; nm.onclick = function () { openUrl(it.url); };
+      var nm = E('div', 'nm', it.name); nm.title = local ? 'Voir l’article' : 'Comparer les prix sur leDénicheur'; nm.onclick = function () { if (local && it.anchor != null) local.locate(it.anchor); else openUrl(it.url); };
+      if (it.badge) b.append(E('span', 'bdg', it.badge));
       b.append(nm);
       var mt = E('div', 'mt');
       if (it.rating) { var s = E('span'); s.append(E('span', 'stars', '★ ' + it.rating.toLocaleString('fr-FR', { maximumFractionDigits: 1 })), document.createTextNode(' (' + (it.reviews || 0).toLocaleString('fr-FR') + ' avis)')); mt.append(s); }
@@ -1050,10 +1054,21 @@
       if (tim && it.timing !== 'ok') tr.append(E('span', 'tag ' + tim[0], tim[1]));
       if (tr.children.length) b.append(tr);
       if (it.why) b.append(E('div', 'why', it.why));
+      if ((it.pros && it.pros.length) || (it.cons && it.cons.length)) {
+        var pc = E('div', 'pc');
+        (it.pros || []).slice(0, 3).forEach(function (t) { var r = E('span', 'p'); r.append(E('b', '', '+'), document.createTextNode(t)); pc.append(r); });
+        (it.cons || []).slice(0, 2).forEach(function (t) { var r = E('span', 'c'); r.append(E('b', '', '–'), document.createTextNode(t)); pc.append(r); });
+        b.append(pc);
+      }
       var ac = E('div', 'acts');
-      if (it.offer) { var o = E('button', 'btn', 'Voir l’offre'); o.onclick = function () { openUrl(it.offer); }; ac.append(o); }
-      var cp = E('button', it.offer ? 'btn gh' : 'btn', 'Comparer les prix'); cp.onclick = function () { openUrl(it.url); };
-      ac.append(cp);
+      if (local) {
+        if (it.anchor != null) { var lo = E('button', 'btn', 'Voir sur la page'); lo.onclick = function () { local.locate(it.anchor); }; ac.append(lo); }
+        if (it.url) { var op = E('button', it.anchor != null ? 'btn gh' : 'btn', 'Ouvrir l’article'); op.onclick = function () { openUrl(it.url); }; ac.append(op); }
+      } else {
+        if (it.offer) { var o = E('button', 'btn', 'Voir l’offre'); o.onclick = function () { openUrl(it.offer); }; ac.append(o); }
+        var cp = E('button', it.offer ? 'btn gh' : 'btn', 'Comparer les prix'); cp.onclick = function () { openUrl(it.url); };
+        ac.append(cp);
+      }
       b.append(ac);
       k.append(pic, b);
       return k;
@@ -1075,15 +1090,15 @@
       var st = E('style'); st.textContent = css(); root.append(st);
       var pn = E('div', 'pn');
       var hdr = E('div', 'hdr'), tt = E('div', 'tt');
-      tt.append(E('h2', '', mode === 'history' ? 'Historique de l’agent' : 'Recherche d’achat'),
-        E('small', '', mode === 'history' ? 'Recherches d’achat et réponses de l’agent' : v.busy ? 'Recherche en cours…' : 'Prix, suivi des prix et conseils de l’IA'));
+      tt.append(E('h2', '', mode === 'history' ? 'Historique de l’agent' : v.title || 'Recherche d’achat'),
+        E('small', '', mode === 'history' ? 'Recherches d’achat et réponses de l’agent' : v.busy ? (v.busyText || 'Recherche en cours…') : v.sub || 'Prix, suivi des prix et conseils de l’IA'));
       var hb = E('button', 'rb' + (mode === 'history' ? ' on' : '')); hb.title = mode === 'history' ? 'Revenir aux résultats' : 'Historique des recherches';
       hb.append(ic(mode === 'history' ? I.back : I.hist));
       hb.onclick = function () {
-        if (mode === 'history' && v.goal) { mode = 'results'; render(); }
+        if (mode === 'history' && (v.goal || v.rounds)) { mode = 'results'; render(); }
         else { mode = 'history'; list = null; render(); act({ action: 'history' }); }
       };
-      var cl = E('button', 'rb'); cl.title = 'Fermer'; cl.append(ic(I.x)); cl.onclick = function () { act({ action: 'close' }); hide(); };
+      var cl = E('button', 'rb'); cl.title = 'Fermer'; cl.append(ic(I.x)); cl.onclick = function () { if (!local) act({ action: 'close' }); hide(); };
       hdr.append(tt, hb, cl);
       var bd = E('div', 'bd');
       pn.append(hdr, bd);
@@ -1127,7 +1142,7 @@
           if (inp.value.trim()) texts.push(inp.value.trim());
           if (!texts.length) { inp.focus(); return; }
           picked = {}; refineOpen = false;
-          act({ action: 'refine', texts: texts });
+          if (local) local.refine(texts); else act({ action: 'refine', texts: texts });
         };
         go.onclick = send2;
         inp.addEventListener('keydown', function (e) { e.stopPropagation(); if (e.key === 'Enter') send2(); if (e.key === 'Escape') { refineOpen = false; render(); } }, true);
@@ -1136,10 +1151,11 @@
         setTimeout(function () { inp.focus(); }, 30);
       }
       var btns = E('div', 'row');
-      var more = E('button', 'btn gh big', v.busy ? 'Recherche en cours…' : 'Continuer la recherche');
-      var pre = E('button', 'btn big', refineOpen ? 'Annuler' : 'Préciser la recherche');
+      var more = E('button', 'btn gh big', v.busy ? (v.busyText || 'Recherche en cours…') : v.moreLabel || 'Continuer la recherche');
+      var pre = E('button', 'btn big', refineOpen ? 'Annuler' : v.refineLabel || 'Préciser la recherche');
       if (v.busy || !v.goal) { more.setAttribute('disabled', ''); pre.setAttribute('disabled', ''); }
-      more.onclick = function () { refineOpen = false; act({ action: 'more' }); };
+      if (v.noRefine) pre.setAttribute('disabled', '');
+      more.onclick = function () { refineOpen = false; if (local) local.more(); else act({ action: 'more' }); };
       pre.onclick = function () { refineOpen = !refineOpen; render(); };
       btns.append(more, pre);
       ft.append(btns);
@@ -1182,9 +1198,19 @@
       });
     }
 
-    function hide() { if (host) { host.remove(); host = null; root = null; } }
+    function hide() { if (host) { host.remove(); host = null; root = null; } if (local && local.closed) local.closed(); local = null; }
     window.__corrtexShopping = {
+      // panneau tenu par la page elle-même (comparaison des articles de la page) : ses boutons
+      // appellent les fonctions données au lieu du moteur de recherche d'achat
+      showLocal: function (v, handlers) {
+        if (!local || local !== handlers) { refineOpen = false; picked = {}; }
+        local = handlers;
+        mode = 'results';
+        last = v;
+        render();
+      },
       show: function (v) {
+        local = null;
         if (v && v.history) { mode = 'history'; list = null; last = last || {}; render(); act({ action: 'history' }); return; }
         if (v && last && v.hid !== last.hid) { refineOpen = false; picked = {}; }
         if (v) last = v;
@@ -1194,7 +1220,200 @@
       hide: hide,
       history: function (l) { list = l || []; if (mode === 'history') render(); }
     };
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && host && !refineOpen) { act({ action: 'close' }); hide(); } }, true);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && host && !refineOpen) { if (!local) act({ action: 'close' }); hide(); } }, true);
+  })();
+
+  // ---------------------------------------------------------------- comparer les articles de la page
+  // Bouton « Comparer les articles de la page » du panneau IA : les articles affichés sur la page
+  // (données structurées, sinon cartes avec prix, lien et image) sont envoyés à l'IA avec les besoins
+  // de l'utilisateur ; les meilleurs choix s'affichent dans le panneau en verre.
+  (function () {
+    var els = [], items = [], needs = '', refinements = [], seq = 0, waiting = null, pageInfo = null;
+    var PRICE = /(\d{1,3}(?:[\s  .]\d{3})*(?:[.,]\d{1,2})?)\s?€|€\s?(\d{1,3}(?:[\s  .]\d{3})*(?:[.,]\d{1,2})?)/;
+    function num(s) { if (s == null) return null; var n = parseFloat(String(s).replace(/[\s  ]/g, '').replace(/\.(?=\d{3}\b)/g, '').replace(',', '.')); return isFinite(n) && n > 0 ? n : null; }
+    function clean(t) { return String(t || '').replace(/\s+/g, ' ').trim(); }
+    function abs(u) { try { return u ? new URL(u, location.href).href : ''; } catch (e) { return ''; } }
+
+    // articles décrits par les données structurées de la page (schema.org)
+    function fromLd() {
+      var out = [];
+      function walk(o, depth) {
+        if (!o || typeof o !== 'object' || depth > 6 || out.length > 60) return;
+        if (Array.isArray(o)) { o.forEach(function (x) { walk(x, depth + 1); }); return; }
+        var t = [].concat(o['@type'] || []).join(' ');
+        if (/Product/.test(t) && o.name) {
+          var of = [].concat(o.offers || [])[0] || {};
+          var ag = o.aggregateRating || {};
+          out.push({ name: clean(o.name), price: num(of.price || of.lowPrice), url: abs(o.url || of.url), image: abs([].concat(o.image || [])[0] && ([].concat(o.image)[0].url || [].concat(o.image)[0])),
+            rating: num(ag.ratingValue), reviews: parseInt(ag.reviewCount || ag.ratingCount || 0, 10) || 0, details: clean((o.brand && (o.brand.name || o.brand)) ? 'Marque : ' + (o.brand.name || o.brand) + '. ' : '') + clean(o.description).slice(0, 160) });
+          return;
+        }
+        if (o.itemListElement) walk(o.itemListElement, depth + 1);
+        if (o.item) walk(o.item, depth + 1);
+        if (o['@graph']) walk(o['@graph'], depth + 1);
+      }
+      document.querySelectorAll('script[type="application/ld+json"]').forEach(function (sc) { try { walk(JSON.parse(sc.textContent), 0); } catch (e) {} });
+      return out;
+    }
+
+    // cartes d'articles visibles : un prix, un lien et une image dans un même bloc
+    function fromDom() {
+      var out = [], cards = [], seen = new Set(), priceOf = new Map();
+      var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), n, count = 0;
+      while ((n = w.nextNode()) && count < 6000 && cards.length < 60) {
+        count++;
+        var t = n.data;
+        if (t.length > 60 || !PRICE.test(t)) continue;
+        var el = n.parentElement, card = null;
+        for (var k = 0; el && k < 9; k++, el = el.parentElement) {
+          if (el === document.body) break;
+          if (!el.querySelector('a[href]') || !el.querySelector('img')) continue;
+          var r = el.getBoundingClientRect();
+          if (r.height < 90 || r.height > 1000 || r.width > innerWidth * 0.75 || r.width < 90) continue;
+          if (el.textContent.length > 2500) break;
+          card = el;
+          break;
+        }
+        if (!card || seen.has(card)) continue;
+        // un bloc qui contient déjà une carte retenue (ou l'inverse) n'est pas une nouvelle carte
+        if (cards.some(function (c) { return c.contains(card) || card.contains(c); })) continue;
+        seen.add(card);
+        cards.push(card);
+        // le prix vient du texte qui a fait repérer la carte (pas des chiffres du titre)
+        var pm0 = t.match(PRICE);
+        if (pm0) priceOf.set(card, num(pm0[1] || pm0[2]));
+      }
+      cards.forEach(function (c) {
+        var title = '';
+        var cand = c.querySelectorAll('h1, h2, h3, h4, [class*="title" i], [class*="name" i], [itemprop="name"], a[title]');
+        for (var i = 0; i < cand.length && !title; i++) {
+          var tx = clean(cand[i].getAttribute('title') || cand[i].textContent);
+          if (tx.length >= 6 && tx.length <= 220 && !PRICE.test(tx)) title = tx;
+        }
+        if (!title) {
+          var best = '';
+          c.querySelectorAll('a').forEach(function (a) { var tx = clean(a.textContent); if (tx.length > best.length && tx.length < 220 && !PRICE.test(tx)) best = tx; });
+          title = best || clean((c.querySelector('img') || {}).alt);
+        }
+        if (!title) return;
+        var text = clean(c.innerText || c.textContent);
+        var pm = text.match(PRICE);
+        var img = c.querySelector('img');
+        var src = img ? (img.currentSrc || img.src || img.getAttribute('data-src') || '') : '';
+        var rm = text.match(/(\d[.,]\d)\s*(?:\/\s*5|sur 5|étoiles?)/i) || (c.querySelector('[aria-label*="5"]') && (c.querySelector('[aria-label*="5"]').getAttribute('aria-label').match(/(\d[.,]\d)/)));
+        var rv = text.match(/\(?(\d[\d\s .]*)\s*(?:avis|évaluations?|notes?)\)?/i);
+        out.push({ name: title, price: priceOf.has(c) ? priceOf.get(c) : pm ? num(pm[1] || pm[2]) : null, url: abs((c.querySelector('a[href]') || {}).getAttribute ? c.querySelector('a[href]').getAttribute('href') : ''),
+          image: /^data:/.test(src) && src.length < 400 ? '' : abs(src), rating: rm ? num(rm[1]) : null, reviews: rv ? parseInt(rv[1].replace(/\D/g, ''), 10) || 0 : 0,
+          details: text.replace(title, '').slice(0, 200), el: c });
+      });
+      return out;
+    }
+
+    function collect() {
+      var dom = fromDom(), ld = fromLd();
+      // les cartes de la page sont préférées (on peut y faire défiler) ; les données structurées complètent
+      var list = dom.length >= 2 ? dom : ld.length >= 2 ? ld : dom.concat(ld);
+      var seen = {}, res = [];
+      list.forEach(function (it) {
+        var key = (it.name || '').toLowerCase().slice(0, 70);
+        if (!key || seen[key]) return;
+        seen[key] = 1;
+        if (!it.el && it.url) {
+          var a = document.querySelector('a[href="' + it.url.replace(/"/g, '') + '"]') || null;
+          if (a) it.el = a.closest('li, article, div') || a;
+        }
+        res.push(it);
+      });
+      return res.slice(0, 40);
+    }
+
+    var eur = function (n) { return n == null ? '?' : n.toLocaleString('fr-FR', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }) + ' €'; };
+    function json(text) {
+      var t = String(text || '').replace(/```(?:json)?/g, '');
+      var i = t.indexOf('{'), j = t.lastIndexOf('}');
+      if (i < 0 || j < i) return null;
+      try { return JSON.parse(t.slice(i, j + 1)); } catch (e) { return null; }
+    }
+
+    function base(extra) {
+      var host = location.hostname.replace(/^www\./, '');
+      return Object.assign({ title: 'Comparaison des articles', sub: host + ' · ' + items.length + ' article' + (items.length > 1 ? 's' : '') + ' comparés',
+        goal: needs || 'Comparaison générale (qualité, prix)', summary: '', tags: refinements.slice(), steps: [], rounds: [], suggestions: [],
+        moreLabel: 'Chercher ailleurs', refineLabel: 'Préciser mes besoins', busyText: 'Comparaison en cours…' }, extra || {});
+    }
+
+    var handlers = {
+      locate: function (n) {
+        var el = els[n];
+        if (!el || !el.isConnected) { if (items[n] && items[n].url) send('open_new_tab', { url: items[n].url }); return; }
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        var o = el.style.outline, oo = el.style.outlineOffset, br = el.style.borderRadius;
+        el.style.outline = '3px solid ' + (cxTheme().accent || '#ff4f7b');
+        el.style.outlineOffset = '4px';
+        if (!br) el.style.borderRadius = '12px';
+        setTimeout(function () { el.style.outline = o; el.style.outlineOffset = oo; el.style.borderRadius = br; }, 2600);
+      },
+      refine: function (texts) { refinements = refinements.concat(texts).slice(-6); ask(); },
+      more: function () { send('shopping_action', { action: 'new', goal: needs ? needs + (refinements.length ? ' (' + refinements.join(', ') + ')' : '') : document.title }); },
+      closed: function () { waiting = null; }
+    };
+
+    function ask() {
+      var req = 'pc' + (++seq);
+      waiting = req;
+      var steps = [{ t: items.length + ' articles trouvés sur la page', s: 'ok' }, { t: 'L’IA compare les articles selon vos besoins…', s: 'run' }];
+      window.__corrtexShopping.showLocal(base({ busy: true, steps: steps }), handlers);
+      var rows = items.map(function (it, i) {
+        return i + ' | ' + it.name.slice(0, 140) + ' | ' + eur(it.price) + ' | ' + (it.rating ? it.rating + '/5' + (it.reviews ? ' (' + it.reviews + ' avis)' : '') : 'pas de note') + ' | ' + clean(it.details).slice(0, 150);
+      });
+      var prompt = 'Je regarde la page « ' + document.title.slice(0, 150) + ' » (' + location.hostname + ').\n' +
+        'Mes besoins : ' + (needs ? '« ' + needs + ' »' : 'pas de besoin précis : compare de manière générale (qualité, prix, avis).') +
+        (refinements.length ? '\nPrécisions : ' + refinements.join(' ; ') : '') +
+        '\n\nVoici les articles présents sur la page :\nn | nom | prix | note | détails\n' + rows.join('\n') + '\n\n' +
+        'Compare ces articles selon mes besoins et choisis les 3 à 5 meilleurs choix, du meilleur au moins bon. Écarte ceux qui ne correspondent pas. ' +
+        'Réponds UNIQUEMENT par un objet JSON, sans aucun texte autour :\n' +
+        '{"picks":[{"n":0,"badge":"Meilleur choix | Meilleur rapport qualité-prix | Le moins cher | Haut de gamme | …","why":"pourquoi, en une ou deux phrases concrètes","pros":["2 ou 3 points forts courts"],"cons":["1 ou 2 points faibles courts"]}],"advice":"conseil d’ensemble en deux phrases au plus","refine":["2 à 4 précisions utiles que je pourrais donner, formulées comme des choix très courts"]}';
+      send('page_cmp_ai', { req: req, prompt: prompt.slice(0, 12000) });
+    }
+
+    window.__corrtexPageCmpAI = function (req, text, done, error) {
+      if (req !== waiting || !(done || error)) return;
+      waiting = null;
+      var r = json(text);
+      if (!r || !Array.isArray(r.picks)) {
+        window.__corrtexShopping.showLocal(base({ steps: [{ t: items.length + ' articles trouvés sur la page', s: 'ok' }, { t: error && !text ? 'Pas de réponse de l’IA : vérifiez que vous êtes connecté au service d’IA du panneau.' : 'Réponse de l’IA illisible : réessayez avec « Préciser mes besoins ».', s: 'err' }] }), handlers);
+        return;
+      }
+      var host = location.hostname.replace(/^www\./, '');
+      var picks = [];
+      r.picks.forEach(function (p) {
+        var it = items[+p.n];
+        if (!it || picks.some(function (x) { return x.anchor === +p.n; })) return;
+        picks.push({ id: String(p.n), anchor: +p.n, name: it.name, image: it.image, url: it.url, price: it.price, shop: host, rating: it.rating, reviews: it.reviews,
+          offers: 0, trend: null, why: String(p.why || ''), timing: 'ok', badge: String(p.badge || '').slice(0, 40),
+          pros: (Array.isArray(p.pros) ? p.pros : []).map(String), cons: (Array.isArray(p.cons) ? p.cons : []).map(String) });
+      });
+      picks = picks.slice(0, 5);
+      window.__corrtexShopping.showLocal(base({ rounds: [{ title: 'Meilleurs choix', advice: String(r.advice || ''), items: picks }],
+        suggestions: (Array.isArray(r.refine) ? r.refine : []).map(String).slice(0, 4) }), handlers);
+      // gardé dans l'historique de l'agent
+      var lines = picks.map(function (p, i) { return (i + 1) + '. ' + p.name + (p.price != null ? ' — ' + eur(p.price) : '') + (p.badge ? ' (' + p.badge + ')' : ''); });
+      send('page_cmp_done', { needs: needs || 'Comparaison générale', answer: lines.join('\n') + (r.advice ? '\n' + r.advice : ''), title: document.title.slice(0, 200) });
+    };
+
+    window.__corrtexPageCompare = function (n) {
+      needs = clean(n).slice(0, 400);
+      refinements = [];
+      items = collect();
+      els = items.map(function (it) { return it.el || null; });
+      items.forEach(function (it) { delete it.el; });
+      if (items.length < 2) {
+        window.__corrtexShopping.showLocal(base({ sub: location.hostname.replace(/^www\./, ''), noRefine: true,
+          steps: [{ t: items.length ? 'Un seul article trouvé sur cette page : ouvrez une page de liste ou de résultats (catégorie, recherche…) pour comparer.' : 'Aucun article trouvé sur cette page. Ouvrez une page de boutique qui affiche plusieurs articles avec leurs prix.', s: 'err' }] }), handlers);
+        return;
+      }
+      ask();
+    };
   })();
 
   // ---------------------------------------------------------------- traduction de la page

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ai-page-compare"
+description = "Enables the ai_page_compare command without any pre-configured scope."
+commands.allow = ["ai_page_compare"]
+
+[[permission]]
+identifier = "deny-ai-page-compare"
+description = "Denies the ai_page_compare command without any pre-configured scope."
+commands.deny = ["ai_page_compare"]
