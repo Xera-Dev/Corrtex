@@ -1223,6 +1223,36 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && host && !refineOpen) { if (!local) act({ action: 'close' }); hide(); } }, true);
   })();
 
+
+  // ---------------------------------------------------------------- barre de défilement et champs de texte
+  // Petite barre de défilement « liquid glass » sur fond transparent (les sites qui ont la leur la gardent),
+  // et pas de suggestions d'écriture du navigateur (bouton « Reformuler ») dans les champs.
+  (function () {
+    try { document.documentElement.setAttribute('writingsuggestions', 'false'); } catch (e) {}
+    document.addEventListener('focusin', function (e) {
+      var t = e.target;
+      if (t && t.nodeType === 1 && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable) && !t.hasAttribute('writingsuggestions')) t.setAttribute('writingsuggestions', 'false');
+    }, true);
+    var css = '::-webkit-scrollbar{width:10px;height:10px;background:transparent}' +
+      '::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}' +
+      '::-webkit-scrollbar-button{display:none;width:0;height:0}' +
+      '::-webkit-scrollbar-thumb{border-radius:10px;border:3px solid transparent;background-clip:padding-box;' +
+      'background-color:rgba(150,150,160,.42);background-image:linear-gradient(180deg,rgba(255,255,255,.38),rgba(255,255,255,.06));' +
+      'box-shadow:inset 0 0 0 1px rgba(255,255,255,.28),inset 0 1px 0 rgba(255,255,255,.45)}' +
+      '::-webkit-scrollbar-thumb:hover{border-width:2px;background-color:rgba(150,150,160,.62)}' +
+      '::-webkit-scrollbar-thumb:active{background-color:rgba(150,150,160,.78)}';
+    function add() {
+      if (document.getElementById('corrtex-scrollbar')) return;
+      var st = document.createElement('style');
+      st.id = 'corrtex-scrollbar';
+      st.textContent = css;
+      // en tête de page : les styles du site, chargés après, l'emportent s'il a sa propre barre
+      var root = document.head || document.documentElement;
+      if (root) root.insertBefore(st, root.firstChild);
+    }
+    if (document.documentElement) add(); else document.addEventListener('DOMContentLoaded', add);
+  })();
+
   // ---------------------------------------------------------------- comparer les articles de la page
   // Bouton « Comparer les articles de la page » du panneau IA : les articles affichés sur la page
   // (données structurées, sinon cartes avec prix, lien et image) sont envoyés à l'IA avec les besoins

@@ -36,6 +36,9 @@
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 
+// pas de suggestions d'écriture du navigateur (bouton « Reformuler ») dans les champs de Corrtex
+try { document.documentElement.setAttribute('writingsuggestions', 'false'); } catch (e) {}
+
 (function () {
   const T = window.__TAURI__;
   const inTauri = !!T;
@@ -102,7 +105,11 @@
       const m = q.match(/(?:^|\s)!([a-z]{1,6})(?=\s|$)/i);
       if (m) { const b = api.bangUrl(m[1].toLowerCase(), q.replace(m[0], ' ').trim()); if (b) return b; }
       const e = api.engines.find((x) => x.id === (engine || api.engine()));
-      if (e && e.url) return e.url + encodeURIComponent(q);
+      if (e && e.url) {
+        // Google : avec le compte choisi parmi les comptes connectés
+        const au = e.id === 'google' ? api.load('googleAuthuser', 0) : 0;
+        return e.url + encodeURIComponent(q) + (au ? '&authuser=' + au : '');
+      }
       return api.pageUrl('search.html') + '#q=' + encodeURIComponent(q);
     },
     // adresse d'une page de recherche (Corrtex ou moteur connu) → texte recherché, sinon null

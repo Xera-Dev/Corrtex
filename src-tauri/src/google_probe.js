@@ -34,7 +34,7 @@
         var start = text.indexOf('[');
         var data = JSON.parse(text.slice(start));
         var list = Array.isArray(data) && Array.isArray(data[1]) ? data[1] : [];
-        var acc = null;
+        var acc = null, all = [];
         for (var i = 0; i < list.length; i++) {
           var a = list[i];
           if (!Array.isArray(a)) continue;
@@ -44,9 +44,10 @@
             if (!email && typeof a[j] === 'string' && /^[^\s@]+@[^\s@]+$/.test(a[j])) { email = a[j]; idx = j; }
             if (!photo && typeof a[j] === 'string' && isPhoto(a[j])) photo = a[j];
           }
-          if (email) { acc = { name: typeof a[idx - 1] === 'string' ? a[idx - 1] : '', email: email, avatar: bigAvatar(photo) }; break; }
+          if (email) all.push({ name: typeof a[idx - 1] === 'string' ? a[idx - 1] : '', email: email, avatar: bigAvatar(photo) });
         }
-        if (acc) { send({ signedIn: true, name: acc.name, email: acc.email, avatar: acc.avatar, log: log }); return; }
+        acc = all[0] || null;
+        if (acc) { send({ signedIn: true, name: acc.name, email: acc.email, avatar: acc.avatar, accounts: all, log: log }); return; }
         if (Array.isArray(data) && Array.isArray(data[1]) && data[1].length === 0) { send({ signedIn: false, log: log }); return; }
       } catch (e) { log += ' | erreur: ' + e; }
       try { sessionStorage.setItem('corrtex_probe_log', log); } catch (e) {}

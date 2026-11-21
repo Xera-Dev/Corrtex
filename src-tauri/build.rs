@@ -49,6 +49,7 @@ fn main() {
             "ai_prompt",
             "ai_image",
             "agent_kind",
+            "google_switch",
             "ai_image_result",
             "shop_sites_set",
             "shop_sites_reset",

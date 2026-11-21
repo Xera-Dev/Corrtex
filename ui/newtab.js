@@ -156,7 +156,7 @@
       aEl.innerHTML = '<p>L’agent prend la main : il ouvre une recherche, parcourt les pages et vous demande de valider chaque action importante.</p>';
       sbox.classList.add('thinking');
     }
-    try { await window.__TAURI__.core.invoke('agent_start', { goal: q }); }
+    try { await window.__TAURI__.core.invoke('agent_start', { goal: q, shopping: kind === 'shopping' }); }
     catch (e) { sbox.classList.remove('thinking'); aEl.innerHTML = '<p class="err">' + esc(String(e)) + '</p>'; }
   }
   function setMode(t) { panel.querySelector('header span').textContent = t; }
@@ -620,6 +620,39 @@
 
   let google = C.load('google', { status: 'unknown' });
 
+  function withUser(url) {
+    const n = google && google.active ? google.active : 0;
+    if (!n || /AddSession|Logout|ServiceLogin/.test(url)) return url;
+    try { const u = new URL(url); if (/google\.com$/.test(u.hostname) || /goo\.gle$/.test(u.hostname)) { u.searchParams.set('authuser', n); return u.href; } } catch (e) {}
+    return url;
+  }
+  const CHECK = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  function renderAccounts(g) {
+    const box = $('gm-accounts');
+    if (!box) return;
+    box.replaceChildren();
+    (g.accounts || []).forEach((a, i) => {
+      const b = document.createElement('button');
+      b.className = 'gacc';
+      const av = document.createElement('span'); av.className = 'gav';
+      if (a.avatar) { const im = document.createElement('img'); im.alt = ''; im.src = a.avatar; im.onerror = () => { im.remove(); av.textContent = (a.name || a.email).charAt(0).toUpperCase(); }; av.append(im); }
+      else av.textContent = (a.name || a.email || '?').charAt(0).toUpperCase();
+      const t = document.createElement('span'); t.className = 'gt';
+      const n = document.createElement('b'); n.textContent = a.name || a.email;
+      const e = document.createElement('small'); e.textContent = a.email;
+      t.append(n, e);
+      b.append(av, t);
+      if (i === (g.active || 0)) { const ok = document.createElement('span'); ok.className = 'ok'; ok.innerHTML = CHECK; b.append(ok); b.title = 'Compte utilisé par Corrtex'; }
+      else { b.title = 'Utiliser ce compte'; b.onclick = () => C.invoke('google_switch', { index: i }); }
+      box.append(b);
+    });
+    const add = document.createElement('button');
+    add.className = 'gacc add';
+    add.innerHTML = '<span class="gav">' + I.add + '</span><span class="gt"><b>Ajouter un autre compte</b><small>Connexion d’un compte Google supplémentaire</small></span>';
+    add.onclick = () => { location.href = 'https://accounts.google.com/AddSession?hl=fr&continue=https%3A%2F%2Fwww.google.com%2F'; };
+    box.append(add);
+  }
+
   function setAvatar(box, img, letter, g) {
     letter.textContent = (g.name || g.email || '?').trim().charAt(0).toUpperCase();
     if (g.avatar) { img.src = g.avatar; box.classList.remove('noimg'); img.onerror = () => box.classList.add('noimg'); }
@@ -640,6 +673,9 @@
     setAvatar(document.querySelector('.gm-avatar'), $('gm-img'), $('gm-letter'), g);
     $('gm-name').textContent = g.name || 'Compte Google';
     $('gm-email').textContent = g.email || '';
+    renderAccounts(g);
+    // moteur Google : recherches avec le compte choisi
+    C.save('googleAuthuser', g.active || 0);
   }
 
   const CHEVRON = '<svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>';
@@ -650,7 +686,8 @@
     b.innerHTML = I[it.icon] + '<span></span>' + (it.right ? '<em class="right"></em>' : '') + CHEVRON;
     b.querySelector('span').textContent = it.label;
     if (it.right) b.querySelector('.right').textContent = it.right;
-    b.onclick = () => { location.href = it.url; };
+    // les pages Google s'ouvrent avec le compte choisi (authuser)
+    b.onclick = () => { location.href = withUser(it.url); };
     return b;
   }
 

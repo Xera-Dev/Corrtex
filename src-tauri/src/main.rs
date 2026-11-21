@@ -68,8 +68,15 @@ const DESKTOP_UA: Option<&str> = Some("Mozilla/5.0 (Macintosh; Intel Mac OS X 10
 #[cfg(not(target_os = "macos"))]
 const DESKTOP_UA: Option<&str> = None;
 
+/// Options du moteur WebView2 (identiques pour toutes les vues) : celles de Tauri par défaut, plus
+/// l'aide à l'écriture d'Edge coupée (bouton « Reformuler » / « Réécrire avec Copilot » dans les champs).
+#[cfg(windows)]
+const WEBVIEW_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,msEdgeComposeInline,msComposeInline,msEdgeCompose,msInlineCompose,msEdgeComposeInlineRewrite,msEdgeWritingAssistance,msWritingAssistance,msEditorRewrite,msEdgeRewrite,msCopilotRewrite";
+
 fn web(label: impl Into<String>, url: WebviewUrl) -> WebviewBuilder<tauri::Wry> {
     let b = WebviewBuilder::new(label, url).browser_extensions_enabled(true).background_color(BG);
+    #[cfg(windows)]
+    let b = b.additional_browser_args(WEBVIEW_ARGS);
     match DESKTOP_UA {
         Some(ua) => b.user_agent(ua),
         None => b,
@@ -229,6 +236,19 @@ struct Google {
     email: String,
     #[serde(default)]
     avatar: String,
+    /// tous les comptes Google connectés (dans l'ordre de Google : authuser 0, 1, 2…)
+    #[serde(default)]
+    accounts: Vec<GAccount>,
+    /// compte utilisé par Corrtex pour les pages Google (authuser)
+    #[serde(default)]
+    active: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Default)]
+struct GAccount {
+    name: String,
+    email: String,
+    avatar: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -294,6 +314,9 @@ struct Settings {
     /// boutiques que l'agent de recherche d'achat peut visiter en plus de leDénicheur
     #[serde(default = "default_shop_sites")]
     shop_sites: Vec<ShopSite>,
+    /// compte Google choisi parmi les comptes connectés
+    #[serde(default)]
+    google_active: u32,
 }
 
 /// Boutique visitée par l'agent d'achat : `search` est l'adresse de recherche, {q} y est remplacé par la recherche.
@@ -374,7 +397,7 @@ fn default_side_w() -> f64 {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { ai_provider: "claude".into(), sidebar_open: false, ai_skin: true, sidebar_w: 400.0, ai_memory: true, ai_chats: HashMap::new(), restore_session: true, sleep_min: 30, zooms: HashMap::new(), save_history: true, notes: HashMap::new(), read_later: Vec::new(), keys: HashMap::new(), gestures: true, focus_sites: default_focus_sites(), update_repo: String::new(), last_version: String::new(), profiles: Vec::new(), power_mode: default_power(), auto_update: true, keep_running: true, shop_sites: default_shop_sites() }
+        Settings { ai_provider: "claude".into(), sidebar_open: false, ai_skin: true, sidebar_w: 400.0, ai_memory: true, ai_chats: HashMap::new(), restore_session: true, sleep_min: 30, zooms: HashMap::new(), save_history: true, notes: HashMap::new(), read_later: Vec::new(), keys: HashMap::new(), gestures: true, focus_sites: default_focus_sites(), update_repo: String::new(), last_version: String::new(), profiles: Vec::new(), power_mode: default_power(), auto_update: true, keep_running: true, shop_sites: default_shop_sites(), google_active: 0 }
     }
 }
 
@@ -4344,14 +4367,15 @@ async fn agent_open(app: AppHandle, webview: Webview) -> Result<(), String> {
 
 /// Lance l'agent dans l'onglet actif.
 #[tauri::command]
-async fn agent_start(app: AppHandle, webview: Webview, goal: String) -> Result<String, String> {
+async fn agent_start(app: AppHandle, webview: Webview, goal: String, shopping: Option<bool>) -> Result<String, String> {
     let win = caller_win(&webview);
     let goal: String = goal.trim().chars().take(500).collect();
     if goal.is_empty() {
         return Err("objectif vide".into());
     }
     // recherche d'achat : comparateur de prix et suivi des prix plutôt que des clics sur une page
-    if is_shopping_goal(&goal) {
+    // (la recherche IA de l'accueil la demande directement)
+    if shopping.unwrap_or(false) || is_shopping_goal(&goal) {
         open_shopping(&app, &win, &goal)?;
         return Ok("shopping".into());
     }
@@ -4388,7 +4412,16 @@ async fn agent_kind(goal: String) -> String {
     if starts.iter().any(|w| g.starts_with(w)) || anywhere.iter().any(|w| g.contains(w)) {
         return "action".into();
     }
-    "answer".into()
+    // question de connaissance (réponse rédigée) ; tout le reste passe par la comparaison des meilleurs articles
+    let ask = [
+        "qui ", "que ", "quoi", "quand", "où ", "ou est", "pourquoi", "comment ", "combien de", "quel est", "quelle est", "quels sont", "quelles sont",
+        "qu'est", "qu’est", "c'est quoi", "c’est quoi", "explique", "définition", "définis", "traduis", "traduction", "résume", "calcule",
+        "est-ce", "peut-on", "histoire de", "météo", "actualité", "actualités", "news", "heure ", "score", "résultat du", "recette", "signification",
+    ];
+    if ask.iter().any(|w| g.starts_with(w)) || ["météo", "actualit", "recette", "définition", "traduction"].iter().any(|w| g.contains(w)) {
+        return "answer".into();
+    }
+    "shopping".into()
 }
 
 // ---------------------------------------------------------------- recherche d'achat de l'agent
@@ -6812,6 +6845,22 @@ async fn tab_event(app: AppHandle, webview: Webview, kind: String, data: serde_j
     }
 }
 
+/// Choisit le compte Google utilisé par Corrtex (parmi les comptes connectés).
+#[tauri::command]
+async fn google_switch(app: AppHandle, index: u32) {
+    {
+        let mut b = state(&app);
+        let Some(a) = b.google.accounts.get(index as usize).cloned() else { return };
+        b.settings.google_active = index;
+        b.google.active = index;
+        b.google.name = a.name;
+        b.google.email = a.email;
+        b.google.avatar = a.avatar;
+    }
+    save_settings(&app);
+    broadcast(&app);
+}
+
 /// Réponse de la vue invisible "gprobe" (google.com) : état de connexion et profil.
 #[tauri::command]
 async fn google_profile(app: AppHandle, webview: Webview, data: serde_json::Value) {
@@ -6833,8 +6882,33 @@ async fn google_profile(app: AppHandle, webview: Webview, data: serde_json::Valu
     if !(avatar.starts_with("https://") && avatar.contains("googleusercontent.com/")) {
         avatar.clear();
     }
+    // tous les comptes connectés (plusieurs comptes Google possibles)
+    let clean_avatar = |a: &str| if a.starts_with("https://") && a.contains("googleusercontent.com/") { a.chars().take(2048).collect() } else { String::new() };
+    let mut accounts: Vec<GAccount> = data
+        .get("accounts")
+        .and_then(|v| v.as_array())
+        .map(|l| {
+            l.iter()
+                .take(10)
+                .map(|a| GAccount {
+                    name: a.get("name").and_then(|v| v.as_str()).unwrap_or("").chars().take(120).collect(),
+                    email: a.get("email").and_then(|v| v.as_str()).unwrap_or("").chars().take(200).collect(),
+                    avatar: clean_avatar(a.get("avatar").and_then(|v| v.as_str()).unwrap_or("")),
+                })
+                .filter(|a| a.email.contains('@'))
+                .collect()
+        })
+        .unwrap_or_default();
+    if signed_in && accounts.is_empty() {
+        accounts.push(GAccount { name: take("name", 120), email: take("email", 200), avatar: avatar.clone() });
+    }
     let g = if signed_in {
-        Google { status: "signed_in".into(), name: take("name", 120), email: take("email", 200), avatar }
+        let mut active = state(&app).settings.google_active;
+        if active as usize >= accounts.len() {
+            active = 0;
+        }
+        let cur = accounts[active as usize].clone();
+        Google { status: "signed_in".into(), name: cur.name, email: cur.email, avatar: cur.avatar, accounts, active }
     } else {
         Google { status: "signed_out".into(), ..Default::default() }
     };
@@ -6915,6 +6989,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             tab_event,
             google_profile,
+            google_switch,
             get_state,
             new_tab,
             close_tab,

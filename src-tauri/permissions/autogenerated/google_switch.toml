@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-google-switch"
+description = "Enables the google_switch command without any pre-configured scope."
+commands.allow = ["google_switch"]
+
+[[permission]]
+identifier = "deny-google-switch"
+description = "Denies the google_switch command without any pre-configured scope."
+commands.deny = ["google_switch"]
