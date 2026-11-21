@@ -2793,9 +2793,12 @@ fn open_popup(app: &AppHandle, win: &str, prefix: &str, mut data: serde_json::Va
     let psize = tauri::PhysicalSize::new((size.width * scale).round() as u32, (size.height * scale).round() as u32);
     let wlabel = format!("{prefix}-{win}");
     let vlabel = format!("{}-{win}", if prefix == "prvw" { "preview" } else { "popup" });
+    popup_targets().lock().unwrap_or_else(|e| e.into_inner()).insert(wlabel.clone(), pos);
     if let Some(pw) = app.get_window(&wlabel) {
         let _ = pw.set_position(pos);
         let _ = pw.set_size(psize);
+        // Windows peut déplacer la fenêtre en changeant sa taille (changement d'échelle d'écran) : on la remet en place
+        let _ = pw.set_position(pos);
     }
     if let Some(wv) = app.get_webview(&vlabel) {
         set_bounds(&wv, LogicalPosition::new(0.0, 0.0), size);
@@ -2803,6 +2806,12 @@ fn open_popup(app: &AppHandle, win: &str, prefix: &str, mut data: serde_json::Va
     // la page dessine le contenu, ajuste la taille, puis demande à être montrée (popup_fit)
     let _ = app.emit_to(vlabel.as_str(), "popup-data", data);
     Ok(())
+}
+
+/// Position voulue de chaque petite fenêtre (menus, aperçu d'onglet), en pixels réels.
+fn popup_targets() -> &'static Mutex<HashMap<String, tauri::PhysicalPosition<i32>>> {
+    static M: std::sync::OnceLock<Mutex<HashMap<String, tauri::PhysicalPosition<i32>>>> = std::sync::OnceLock::new();
+    M.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 fn close_popups(app: &AppHandle, win: &str) {
@@ -2829,6 +2838,7 @@ async fn popup_fit(app: AppHandle, webview: Webview, height: f64) {
     let prefix = if webview.label().starts_with("preview-") { "prvw" } else { "popw" };
     let main_scale = app.get_window(&win).and_then(|m| m.scale_factor().ok());
     if let (Some(w), Some(scale)) = (app.get_window(&format!("{prefix}-{win}")), main_scale.or_else(|| webview.window().scale_factor().ok())) {
+        let target = popup_targets().lock().unwrap_or_else(|e| e.into_inner()).get(&format!("{prefix}-{win}")).copied();
         if let Ok(size) = w.inner_size() {
             let width = size.width as f64 / scale;
             let size = LogicalSize::new(width, height.clamp(40.0, 700.0) + POP_MARGIN + 6.0);
@@ -2839,8 +2849,17 @@ async fn popup_fit(app: AppHandle, webview: Webview, height: f64) {
         if prefix == "prvw" && state(&app).windows.get(&win).map(|x| x.preview.is_none()).unwrap_or(true) {
             return;
         }
+        // toujours à l'endroit voulu (sous l'onglet), même si le système l'a déplacée entre-temps
+        if let Some(p) = target {
+            let _ = w.set_position(p);
+        }
         // contenu prêt : la fenêtre apparaît (un menu prend le focus pour se fermer au clic ailleurs)
         let _ = w.show();
+        if let Some(p) = target {
+            if w.outer_position().map(|o| o != p).unwrap_or(false) {
+                let _ = w.set_position(p);
+            }
+        }
         if prefix == "popw" {
             let _ = w.set_focus();
             let _ = webview.set_focus();

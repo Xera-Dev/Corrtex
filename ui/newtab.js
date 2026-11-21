@@ -33,7 +33,7 @@
   $('q').addEventListener('input', () => {
     const typed = $('q').value.trim();
     clearTimeout(sgTimer);
-    if (!typed) { hideSugg(); return; }
+    if (!typed || aiOn) { hideSugg(); return; }
     const seq = ++sgSeq;
     sgTimer = setTimeout(async () => {
       const res = (await C.invoke('suggest', { query: typed })) || [];
@@ -56,6 +56,9 @@
 
   $('search').addEventListener('submit', (e) => {
     e.preventDefault();
+    // mode IA : une adresse s'ouvre quand même, le reste est posé à l'IA
+    const typed = $('q').value.trim();
+    if (aiOn && typed && !/(^|\s)![a-z]/i.test(typed) && C.toUrl(typed) === C.searchUrl(typed)) { ask(typed); $('q').value = ''; return; }
     const url = C.toUrl($('q').value);
     if (url) { C.prefetchSearch(url); location.href = url; }
   });
@@ -63,27 +66,136 @@
   // connexions vers les moteurs ouvertes à l'avance : la première recherche part plus vite
   if (C.engine() === 'corrtex') C.invoke('search_warm');
 
-  // Recherche vocale (si le moteur la prend en charge)
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) $('mic').style.display = 'none';
-  else {
-    let rec = null;
-    $('mic').addEventListener('click', () => {
-      if (rec) { rec.stop(); return; }
-      rec = new SR();
-      rec.lang = 'fr-FR';
-      rec.interimResults = true;
-      rec.onresult = (ev) => {
-        const r = ev.results[ev.results.length - 1];
-        $('q').value = r[0].transcript;
-        if (r.isFinal) $('search').requestSubmit();
-      };
-      rec.onerror = () => { $('mic').title = 'Recherche vocale indisponible'; };
-      rec.onend = () => { rec = null; $('mic').classList.remove('listening'); };
-      $('mic').classList.add('listening');
-      try { rec.start(); } catch (e) { rec = null; $('mic').classList.remove('listening'); }
-    });
+  // ------------------------------------------------------------- recherche IA
+  // Le bouton IA (à la place du micro) passe la barre en mode IA : contour arc-en-ciel,
+  // et la réponse s'affiche juste en dessous, dans un panneau de verre où l'on peut continuer
+  // la discussion. Les sources viennent du moteur Corrtex ; l'IA est celle du panneau (sans clé).
+  const sbox = $('sbox'), panel = $('aipanel'), thread = $('ai-thread');
+  const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const clean = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+  let aiOn = false, conv = [], cur = null, aiReq = '';
+  function setAi(on) {
+    aiOn = on;
+    sbox.classList.toggle('ai', on);
+    $('q').placeholder = on ? 'Demandez n’importe quoi à l’IA…' : 'Rechercher avec Corrtex ou saisir une URL';
+    $('aibtn').title = on ? 'Revenir à la recherche classique' : 'Recherche IA : l’IA répond directement ici';
+    if (on) { hideSugg(); C.invoke('search_warm'); }
+    C.save('homeAI', on);
+    $('q').focus();
   }
+  $('aibtn').addEventListener('click', () => setAi(!aiOn));
+  if (C.load('homeAI', false)) setAi(true);
+
+  // résultats web (DuckDuckGo et Mojeek) qui servent de sources à la réponse
+  function parseWeb(src, html) {
+    const d = new DOMParser().parseFromString(html, 'text/html'), out = [];
+    if (src === 'ddg') d.querySelectorAll('.result').forEach((r) => {
+      if (/result--ad/.test(r.className)) return;
+      const a = r.querySelector('a.result__a'); if (!a) return;
+      let u = a.getAttribute('href') || ''; const m = u.match(/[?&]uddg=([^&]+)/); if (m) { try { u = decodeURIComponent(m[1]); } catch (e) {} }
+      if (/^https?:\/\//.test(u) && !/duckduckgo\.com/.test(u)) out.push({ url: u, title: clean(a.textContent), snippet: clean((r.querySelector('.result__snippet') || {}).textContent) });
+    });
+    else d.querySelectorAll('ul.results-standard > li, .results-standard li').forEach((li) => {
+      const a = li.querySelector('h2 a, a.title'); if (!a) return;
+      const u = a.getAttribute('href') || '';
+      if (/^https?:\/\//.test(u)) out.push({ url: u, title: clean(a.textContent), snippet: clean((li.querySelector('p.s') || li.querySelector('p') || {}).textContent) });
+    });
+    return out;
+  }
+  async function sources(q) {
+    const get = (src) => Promise.race([
+      window.__TAURI__.core.invoke('search_fetch', { source: src, q, page: 1, form: null }).then((t) => parseWeb(src, t)),
+      new Promise((res) => setTimeout(() => res([]), 3500)),
+    ]).catch(() => []);
+    const [a, b] = await Promise.all([get('ddg'), get('mojeek')]);
+    const seen = new Set(), out = [];
+    for (const r of a.concat(b)) {
+      const k = r.url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+      if (seen.has(k)) continue;
+      seen.add(k); out.push(r);
+    }
+    return out.slice(0, 8);
+  }
+
+  function format(t, src) {
+    const lines = esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/^#{1,4}\s*(.+)$/gm, '<b>$1</b>').split(/\n+/);
+    let out = '', ul = false;
+    for (const l of lines) {
+      const li = l.match(/^\s*(?:[-*•]|\d+[.)])\s+(.*)/);
+      if (li) { if (!ul) { out += '<ul>'; ul = true; } out += '<li>' + li[1] + '</li>'; continue; }
+      if (ul) { out += '</ul>'; ul = false; }
+      if (l.trim()) out += '<p>' + l + '</p>';
+    }
+    if (ul) out += '</ul>';
+    return out.replace(/\[(\d{1,2})\]/g, (m, n) => { const r = src[+n - 1]; return r ? '<a class="cite" href="' + esc(r.url) + '" title="' + esc(r.title) + '">' + n + '</a>' : m; });
+  }
+  function scrollThread() { thread.scrollTop = thread.scrollHeight; }
+
+  async function ask(q) {
+    q = clean(q);
+    if (!q) return;
+    hideSugg();
+    document.body.classList.add('ai-open');
+    panel.hidden = false;
+    $('ai-acts').hidden = true;
+    sbox.classList.add('thinking');
+    const turn = { q, a: '', src: [] };
+    conv.push(turn);
+    cur = turn;
+    const qEl = document.createElement('div'); qEl.className = 'ai-q'; qEl.innerHTML = '<span>' + esc(q) + '</span>';
+    const aEl = document.createElement('div'); aEl.className = 'ai-a'; aEl.innerHTML = '<div class="ai-wait"><i></i><i></i><i></i></div>';
+    thread.append(qEl, aEl);
+    turn.el = aEl;
+    scrollThread();
+    $('ai-state').textContent = 'recherche des sources…';
+    turn.src = await sources(conv.length > 1 ? conv[0].q + ' ' + q : q);
+    if (cur !== turn) return;
+    $('ai-state').textContent = 'l’IA rédige…';
+    const srcTxt = turn.src.map((r, i) => '[' + (i + 1) + '] ' + r.title + ' — ' + r.url + '\n' + r.snippet).join('\n\n');
+    const hist = conv.slice(0, -1).map((t) => 'Question : ' + t.q + '\nRéponse : ' + t.a.slice(0, 1200)).join('\n\n');
+    const prompt = (hist ? 'Conversation précédente :\n' + hist + '\n\n' : '') +
+      'Question : « ' + q + ' »\n\n' + (srcTxt ? 'Résultats de recherche web actuels :\n\n' + srcTxt + '\n\n' : '') +
+      'Réponds en français, directement et clairement (un court paragraphe, ou une liste si c’est plus lisible), à partir de ces résultats et de tes connaissances. ' +
+      (srcTxt ? 'Cite les sources utilisées avec leur numéro entre crochets, par exemple [2]. ' : '') + 'Pas d’introduction ni de formule de politesse.';
+    aiReq = 'na' + Date.now().toString(36);
+    window.__TAURI__.core.invoke('shop_ask_ai', { prompt, req: aiReq }).catch((e) => window.__corrtexShopAI(aiReq, '', true, true));
+  }
+  window.__corrtexShopAI = (req, text, done, error) => {
+    if (req !== aiReq || !cur) return;
+    const t = cur;
+    if (text) { t.a = text; t.el.innerHTML = format(text, t.src); }
+    if (done || error) {
+      aiReq = '';
+      sbox.classList.remove('thinking');
+      $('ai-state').textContent = '';
+      if (error && !text) t.el.innerHTML = '<p class="err">Pas de réponse de l’IA. Ouvrez le panneau IA et vérifiez que vous êtes connecté à Claude, ChatGPT ou Gemini.</p>';
+      if (t.src.length) {
+        const s = document.createElement('div'); s.className = 'ai-src';
+        s.innerHTML = t.src.slice(0, 6).map((r, i) => '<a href="' + esc(r.url) + '" title="' + esc(r.title) + '"><b>' + (i + 1) + '</b><img alt="" loading="lazy" src="' + esc(C.favicon(r.url, 32)) + '" onerror="this.remove()"><span>' + esc(C.hostOf(r.url)) + '</span></a>').join('');
+        t.el.appendChild(s);
+      }
+      $('ai-acts').hidden = false;
+      scrollThread();
+      setTimeout(() => $('ai-fq').focus(), 50);
+    } else scrollThread();
+  };
+  function closeAi() {
+    panel.hidden = true;
+    document.body.classList.remove('ai-open');
+    sbox.classList.remove('thinking');
+    thread.replaceChildren();
+    conv = []; cur = null; aiReq = '';
+    $('q').focus();
+  }
+  $('ai-close').onclick = closeAi;
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden && !document.querySelector('.drawer.open')) closeAi(); });
+  $('ai-follow').addEventListener('submit', (e) => { e.preventDefault(); const v = $('ai-fq').value; $('ai-fq').value = ''; ask(v); });
+  $('ai-results').onclick = () => { const q = conv.length ? conv[conv.length - 1].q : $('q').value; location.href = C.pageUrl('search.html') + '#q=' + encodeURIComponent(q); };
+  $('ai-panel-btn').onclick = () => { const t = conv[conv.length - 1]; if (t) C.invoke('ai_prompt', { prompt: t.q }); };
+  $('ai-copy').onclick = () => { const t = conv[conv.length - 1]; if (t && navigator.clipboard) navigator.clipboard.writeText(t.a).then(() => { $('ai-copy').lastChild.textContent = 'Copié'; setTimeout(() => { $('ai-copy').lastChild.textContent = 'Copier'; }, 1400); }); };
+  // liens de la réponse : Ctrl+clic ou clic molette = nouvel onglet
+  panel.addEventListener('click', (e) => { const a = e.target.closest('a[href]'); if (a && (e.ctrlKey || e.metaKey)) { e.preventDefault(); C.invoke('new_tab', { url: a.href }); } });
+  panel.addEventListener('auxclick', (e) => { const a = e.target.closest('a[href]'); if (a && e.button === 1) { e.preventDefault(); C.invoke('new_tab', { url: a.href }); } });
 
   // ------------------------------------------------------------- widget musique
   const player = $('player');
