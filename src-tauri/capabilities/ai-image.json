@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "ai-image",
+  "description": "Page d'IA cachée de la génération d'images : elle peut seulement renvoyer les images produites.",
+  "windows": [
+    "*"
+  ],
+  "webviews": [
+    "aiimg-*"
+  ],
+  "remote": {
+    "urls": [
+      "https://chatgpt.com/*",
+      "https://gemini.google.com/*"
+    ]
+  },
+  "permissions": [
+    "allow-ai-image-result"
+  ]
+}

@@ -2100,6 +2100,13 @@ async fn shop_fetch(app: AppHandle, url: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || fetch_shop_page(&url, &extra)).await.map_err(|e| e.to_string())?
 }
 
+/// Envoie une demande au panneau IA (l'ouvre s'il est fermé), par ex. « génère une image ».
+#[tauri::command]
+async fn ai_prompt(app: AppHandle, webview: Webview, prompt: String) -> Result<(), String> {
+    let win = caller_win(&webview);
+    ai_send(&app, &win, prompt.chars().take(4000).collect())
+}
+
 /// Page de résultats du moteur Corrtex : la recherche affichée (pour la barre d'adresse et la session).
 #[tauri::command]
 async fn search_page(app: AppHandle, webview: Webview, hash: String) {
@@ -3970,6 +3977,179 @@ async fn ai_quick_result(app: AppHandle, webview: Webview, req: u64, text: Strin
         let text: String = text.chars().take(20000).collect();
         bubble_update(&app, &q, &text, done, error);
     }
+}
+
+// ---------------------------------------------------------------- génération d'images (ChatGPT / Gemini, sans API)
+/// Une génération d'image en cours dans la vue cachée `aiimg-{win}`.
+#[derive(Clone)]
+struct ImgJob {
+    req: String,
+    view: String,
+    prompt: String,
+    /// IA encore à essayer (la première est celle en cours)
+    providers: Vec<&'static str>,
+    started: bool,
+    serial: u64,
+}
+
+fn img_jobs() -> &'static Mutex<HashMap<String, ImgJob>> {
+    static M: std::sync::OnceLock<Mutex<HashMap<String, ImgJob>>> = std::sync::OnceLock::new();
+    M.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// IA capables de générer des images, la plus probable en premier : celle du panneau si elle
+/// en est capable, sinon ChatGPT puis Gemini (on passe à la suivante si on n'y est pas connecté).
+fn image_providers(app: &AppHandle) -> Vec<&'static str> {
+    let cur = state(app).settings.ai_provider.clone();
+    match cur.as_str() {
+        "gemini" => vec!["gemini", "chatgpt"],
+        _ => vec!["chatgpt", "gemini"],
+    }
+}
+
+fn img_reply(app: &AppHandle, job: &ImgJob, payload: serde_json::Value) {
+    if let Some(v) = app.get_webview(&job.view) {
+        let js = format!(
+            "window.__corrtexImageGen && window.__corrtexImageGen({}, {})",
+            serde_json::to_string(&job.req).unwrap_or_default(),
+            payload
+        );
+        let _ = v.eval(&js);
+    }
+}
+
+/// Lance (ou relance avec l'IA suivante) la génération dans la vue cachée.
+fn img_start(app: &AppHandle, win: &str) -> Result<(), String> {
+    let job = img_jobs().lock().unwrap_or_else(|e| e.into_inner()).get(win).cloned().ok_or("aucune génération")?;
+    let Some(pid) = job.providers.first() else { return Err("aucune IA disponible".into()) };
+    img_reply(app, &job, serde_json::json!({ "status": "start", "provider": provider(pid).name }));
+    let url: tauri::Url = provider(pid).url.parse().map_err(|_| "adresse invalide")?;
+    let label = format!("aiimg-{win}");
+    match app.get_webview(&label) {
+        Some(v) => v.navigate(url).map_err(|e| e.to_string())?,
+        None => {
+            let window = app.get_window(win).ok_or("fenêtre introuvable")?;
+            let (w, _) = window_logical_size(app, win);
+            let app_load = app.clone();
+            window
+                .add_child(
+                    web(label.clone(), WebviewUrl::External(url))
+                        .user_agent(MOBILE_UA)
+                        .initialization_script(AI_SCRIPT)
+                        .focused(false)
+                        .on_page_load(move |wv, payload| {
+                            if matches!(payload.event(), PageLoadEvent::Finished) {
+                                img_page_loaded(&app_load, &wv);
+                            }
+                        })
+                        .on_new_window(|_, _| NewWindowResponse::Deny),
+                    LogicalPosition::new(w + 700.0, 0.0),
+                    LogicalSize::new(480.0, 900.0),
+                )
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    // délai de sécurité : une image peut prendre plus d'une minute
+    let (app2, win2, serial) = (app.clone(), win.to_string(), job.serial);
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(200));
+        let left = {
+            let mut m = img_jobs().lock().unwrap_or_else(|e| e.into_inner());
+            match m.get(&win2) {
+                Some(j) if j.serial == serial => m.remove(&win2),
+                _ => None,
+            }
+        };
+        if let Some(j) = left {
+            img_reply(&app2, &j, serde_json::json!({ "status": "error", "error": "L’IA n’a pas répondu à temps." }));
+        }
+    });
+    Ok(())
+}
+
+fn img_page_loaded(_app: &AppHandle, wv: &Webview) {
+    let win = wv.label().trim_start_matches("aiimg-").to_string();
+    let job = {
+        let mut m = img_jobs().lock().unwrap_or_else(|e| e.into_inner());
+        match m.get_mut(&win) {
+            Some(j) if !j.started => {
+                j.started = true;
+                Some(j.clone())
+            }
+            _ => None,
+        }
+    };
+    let Some(j) = job else { return };
+    let wv = wv.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(1500));
+        let js = format!(
+            "window.__corrtexImageWatch && window.__corrtexImageWatch({}, {});",
+            j.serial,
+            serde_json::to_string(&j.prompt).unwrap_or_default()
+        );
+        let _ = wv.eval(&js);
+    });
+}
+
+/// Page de résultats (onglet Images) : « Générer une image ».
+#[tauri::command]
+async fn ai_image(app: AppHandle, webview: Webview, prompt: String, req: String) -> Result<(), String> {
+    let win = caller_win(&webview);
+    let prompt: String = prompt.trim().chars().take(1500).collect();
+    if prompt.is_empty() {
+        return Err("description vide".into());
+    }
+    static SERIAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let job = ImgJob {
+        req: req.chars().filter(|c| c.is_ascii_alphanumeric()).take(30).collect(),
+        view: webview.label().to_string(),
+        prompt,
+        providers: image_providers(&app),
+        started: false,
+        serial: SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+    };
+    img_jobs().lock().unwrap_or_else(|e| e.into_inner()).insert(win.clone(), job);
+    img_start(&app, &win)
+}
+
+/// Résultat renvoyé par la vue cachée : images (data: ou https:), ou erreur (« login » : pas connecté).
+#[tauri::command]
+async fn ai_image_result(app: AppHandle, webview: Webview, serial: u64, images: Vec<String>, text: String, error: String) {
+    let Some(win) = webview.label().strip_prefix("aiimg-").map(|s| s.to_string()) else { return };
+    let job = {
+        let m = img_jobs().lock().unwrap_or_else(|e| e.into_inner());
+        m.get(&win).filter(|j| j.serial == serial).cloned()
+    };
+    let Some(mut job) = job else { return };
+    let images: Vec<String> = images
+        .into_iter()
+        .filter(|u| u.starts_with("data:image/") || u.starts_with("https://"))
+        .take(4)
+        .collect();
+    let name = job.providers.first().map(|p| provider(p).name).unwrap_or("");
+    if !images.is_empty() {
+        img_jobs().lock().unwrap_or_else(|e| e.into_inner()).remove(&win);
+        img_reply(&app, &job, serde_json::json!({ "status": "done", "images": images, "provider": name, "text": text.chars().take(600).collect::<String>() }));
+        return;
+    }
+    // pas d'image : on essaie l'IA suivante (pas connecté, quota atteint, refus…)
+    job.providers.remove(0);
+    if !job.providers.is_empty() {
+        job.started = false;
+        img_jobs().lock().unwrap_or_else(|e| e.into_inner()).insert(win.clone(), job);
+        let _ = img_start(&app, &win);
+        return;
+    }
+    img_jobs().lock().unwrap_or_else(|e| e.into_inner()).remove(&win);
+    let msg = if error == "login" {
+        "Connectez-vous à ChatGPT ou à Gemini dans le panneau IA pour générer des images.".to_string()
+    } else if !text.trim().is_empty() {
+        text.chars().take(600).collect()
+    } else {
+        "L’IA n’a pas produit d’image. Réessayez ou reformulez la description.".to_string()
+    };
+    img_reply(&app, &job, serde_json::json!({ "status": "error", "error": msg }));
 }
 
 // ---------------------------------------------------------------- traduction de la page
@@ -6735,6 +6915,9 @@ fn main() {
             search::search_prefetch,
             search::search_warm,
             search_page,
+            ai_prompt,
+            ai_image,
+            ai_image_result,
             shop_sites_set,
             shop_sites_reset,
             ai_compare,

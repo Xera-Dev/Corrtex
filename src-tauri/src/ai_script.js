@@ -208,6 +208,78 @@
     }, 300);
   };
 
+
+  // Génération d'image (onglet Images du moteur Corrtex) : on demande l'image, on attend qu'elle
+  // soit finie, puis on la renvoie à Corrtex en data: (les adresses de ChatGPT exigent la connexion).
+  window.__corrtexImageWatch = function (serial, prompt) {
+    function report(images, text, error) {
+      try { window.__TAURI_INTERNALS__.invoke('ai_image_result', { serial: serial, images: images || [], text: (text || '').slice(0, 1500), error: error || '' }); } catch (e) {}
+    }
+    if (!site) { report([], '', 'site'); return; }
+    var gem = /gemini/.test(location.hostname);
+    function loggedOut() {
+      if (gem) return !!document.querySelector('a[href*="accounts.google.com/ServiceLogin"], a[href*="accounts.google.com/v3/signin"], a[href*="accounts.google.com/AccountChooser"]');
+      return !!document.querySelector('[data-testid="login-button"], [data-testid="mobile-login-button"], a[href*="/auth/login"]');
+    }
+    var t0 = Date.now();
+    var waitEd = setInterval(function () {
+      if (loggedOut()) { clearInterval(waitEd); report([], '', 'login'); return; }
+      if (document.querySelector(site.editor)) { clearInterval(waitEd); setTimeout(go, 600); }
+      else if (Date.now() - t0 > 14000) { clearInterval(waitEd); report([], '', 'login'); }
+    }, 400);
+    var srcOf = function (i) { return i.currentSrc || i.src || ''; };
+    function go() {
+      var before = {};
+      [].forEach.call(document.images, function (i) { before[srcOf(i)] = 1; });
+      window.__corrtexAsk((gem ? 'Crée une image : ' : 'Génère une image : ') + prompt + '\n\nGénère directement l’image, sans poser de question.');
+      var start = Date.now(), lastKey = '', stable = Date.now();
+      var tick = setInterval(function () {
+        var busy = !!document.querySelector('button[aria-label*="Stop" i], button[aria-label*="Arrêter" i], button[aria-label*="Interrompre" i], button[data-testid="stop-button"]');
+        var srcs = [];
+        [].forEach.call(document.images, function (i) {
+          var s = srcOf(i);
+          if (!s || before[s] || i.naturalWidth < 300 || i.naturalHeight < 300) return;
+          if (/avatar|profile|favicon|logo|emoji/i.test(s + ' ' + (i.alt || ''))) return;
+          if (srcs.indexOf(s) < 0) srcs.push(s);
+        });
+        var ns = document.querySelectorAll(site.reply), txt = ns.length ? (ns[ns.length - 1].innerText || '').trim() : '';
+        var key = srcs.join('|') + '#' + txt.length;
+        if (key !== lastKey) { lastKey = key; stable = Date.now(); }
+        var quiet = Date.now() - stable;
+        if (srcs.length && !busy && quiet > 3000) { clearInterval(tick); finish(srcs.slice(-4), txt); return; }
+        // une réponse sans image (refus, quota…) : on attend un peu, la génération peut encore démarrer
+        var working = /cr[ée]ation|g[ée]n[ée]ration|creating|generating|en cours|un instant/i.test(txt);
+        if (!srcs.length && txt && !busy && !working && quiet > 9000 && Date.now() - start > 20000) { clearInterval(tick); report([], txt, 'noimage'); return; }
+        if (Date.now() - start > 190000) { clearInterval(tick); report([], txt, 'timeout'); }
+      }, 700);
+    }
+    function toData(s) {
+      if (/^data:image\//.test(s)) return Promise.resolve(s);
+      return fetch(s, { credentials: 'include' }).then(function (r) { return r.blob(); }).then(function (b) {
+        return new Promise(function (res) {
+          var fr = new FileReader();
+          fr.onload = function () { res(String(fr.result).replace(/^data:(application\/octet-stream|binary\/octet-stream)?;/, 'data:image/png;')); };
+          fr.onerror = function () { res(s); };
+          fr.readAsDataURL(b);
+        });
+      }).catch(function () {
+        // autre origine sans autorisation : copie par canvas, sinon l'adresse telle quelle
+        try {
+          var img = [].filter.call(document.images, function (i) { return srcOf(i) === s; })[0];
+          var c = document.createElement('canvas');
+          c.width = img.naturalWidth; c.height = img.naturalHeight;
+          c.getContext('2d').drawImage(img, 0, 0);
+          return c.toDataURL('image/png');
+        } catch (e) { return s; }
+      });
+    }
+    function finish(srcs, txt) {
+      Promise.all(srcs.map(toData)).then(function (list) {
+        report(list.filter(function (u) { return /^data:image\//.test(u) || /^https:\/\//.test(u); }), txt, '');
+      });
+    }
+  };
+
   window.__corrtexAI = apply;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
   else apply();

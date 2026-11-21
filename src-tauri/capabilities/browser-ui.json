@@ -46,6 +46,8 @@
     "allow-search-prefetch",
     "allow-search-warm",
     "allow-search-page",
+    "allow-ai-prompt",
+    "allow-ai-image",
     "allow-shop-sites-set",
     "allow-shop-sites-reset",
     "allow-ai-compare",
