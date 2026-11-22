@@ -317,6 +317,9 @@ struct Settings {
     /// compte Google choisi parmi les comptes connectés
     #[serde(default)]
     google_active: u32,
+    /// panneau IA avec l'interface de Corrtex (l'IA travaille en coulisse) plutôt que le site de l'IA
+    #[serde(default = "yes")]
+    ai_native: bool,
 }
 
 /// Boutique visitée par l'agent d'achat : `search` est l'adresse de recherche, {q} y est remplacé par la recherche.
@@ -397,7 +400,7 @@ fn default_side_w() -> f64 {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { ai_provider: "claude".into(), sidebar_open: false, ai_skin: true, sidebar_w: 400.0, ai_memory: true, ai_chats: HashMap::new(), restore_session: true, sleep_min: 30, zooms: HashMap::new(), save_history: true, notes: HashMap::new(), read_later: Vec::new(), keys: HashMap::new(), gestures: true, focus_sites: default_focus_sites(), update_repo: String::new(), last_version: String::new(), profiles: Vec::new(), power_mode: default_power(), auto_update: true, keep_running: true, shop_sites: default_shop_sites(), google_active: 0 }
+        Settings { ai_provider: "claude".into(), sidebar_open: false, ai_skin: true, sidebar_w: 400.0, ai_memory: true, ai_chats: HashMap::new(), restore_session: true, sleep_min: 30, zooms: HashMap::new(), save_history: true, notes: HashMap::new(), read_later: Vec::new(), keys: HashMap::new(), gestures: true, focus_sites: default_focus_sites(), update_repo: String::new(), last_version: String::new(), profiles: Vec::new(), power_mode: default_power(), auto_update: true, keep_running: true, shop_sites: default_shop_sites(), google_active: 0, ai_native: true }
     }
 }
 
@@ -807,7 +810,9 @@ fn layout_with(app: &AppHandle, win: &str, width: f64, height: f64) {
         let b = state(app);
         let ch = chrome_height(&b, win);
         // vidéo en plein écran : ni panneau IA ni vue côte à côte
-        b.windows.get(win).map(|w| (w.tabs.clone(), w.active, w.sidebar_open && !w.page_fs, w.ai_created, ch, AIBAR_H + w.aibar_extra))
+        // interface Corrtex : l'en-tête prend toute la hauteur du panneau, le site de l'IA reste caché
+        let native = b.settings.ai_native;
+        b.windows.get(win).map(|w| (w.tabs.clone(), w.active, w.sidebar_open && !w.page_fs, w.ai_created, ch, if native { 1.0e6 } else { AIBAR_H + w.aibar_extra }))
     }) else {
         return;
     };
@@ -874,7 +879,7 @@ fn layout_with(app: &AppHandle, win: &str, width: f64, height: f64) {
     }
 
     // page d'IA cachée (réponses rapides) : toujours hors de la fenêtre
-    for key in [win.to_string(), format!("{win}_s1"), format!("{win}_s2"), format!("{win}_s3")] {
+    for key in [win.to_string(), format!("{win}_s1"), format!("{win}_s2"), format!("{win}_s3"), format!("{win}_s4")] {
         if let Some(q) = app.get_webview(&format!("aiq-{key}")) {
             set_bounds(&q, LogicalPosition::new(width + 200.0, 0.0), LogicalSize::new(420.0, 820.0));
         }
@@ -893,12 +898,14 @@ fn layout_with(app: &AppHandle, win: &str, width: f64, height: f64) {
             let _ = wv.hide();
         }
     }
+    let native = bar_h > 1.0e5;
+    let bar_h = bar_h.min((height - ch).max(50.0));
     for (label, y, h) in [
         (format!("aibar-{win}"), ch, bar_h),
         (format!("ai-{win}"), ch + bar_h, (height - ch - bar_h).max(50.0)),
     ] {
         if let Some(wv) = app.get_webview(&label) {
-            if sidebar && ai_created {
+            if sidebar && ai_created && !(native && label.starts_with("ai-")) {
                 set_bounds(&wv, LogicalPosition::new(side_x, y), LogicalSize::new(side_w(), h));
                 let _ = wv.show();
             } else {
@@ -988,6 +995,7 @@ fn create_window(app: &AppHandle, position: Option<(f64, f64)>, size: Option<(f6
         }
         // clic dans la fenêtre du navigateur : le menu ou le panneau ouvert se ferme
         WindowEvent::Focused(true) => {
+            *LAST_FOCUSED.lock().unwrap_or_else(|e| e.into_inner()) = win.clone();
             if let Some(w) = h.get_window(&format!("popw-{win}")) {
                 if w.is_visible().unwrap_or(false) {
                     let _ = w.hide();
@@ -2205,7 +2213,7 @@ async fn shop_ask_ai(app: AppHandle, webview: Webview, prompt: String, req: Stri
     // réponse affichée dans le panneau, par la page d'IA cachée (sans ouvrir le panneau IA) ;
     // « slot » : session d'IA à utiliser (plusieurs questions en parallèle)
     let win = caller_win(&webview);
-    let slot = slot.unwrap_or(0).min(3);
+    let slot = slot.unwrap_or(0).min(4);
     let tab = state(&app).windows.get(&win).and_then(|w| w.active).unwrap_or(0);
     let req: String = req.chars().filter(|c| c.is_ascii_alphanumeric()).take(30).collect();
     let key = quick_key(&win, slot);
@@ -2221,8 +2229,8 @@ async fn shop_ask_ai(app: AppHandle, webview: Webview, prompt: String, req: Stri
 #[tauri::command]
 async fn shop_ai_warm(app: AppHandle, webview: Webview, slots: Vec<u8>) {
     let win = caller_win(&webview);
-    for s in slots.into_iter().take(3) {
-        let _ = quick_warm(&app, &win, s.clamp(1, 3));
+    for s in slots.into_iter().take(4) {
+        let _ = quick_warm(&app, &win, s.clamp(1, 4));
     }
 }
 
@@ -2479,7 +2487,33 @@ fn ask_ai_now(ai: &Webview, prompt: &str) {
 
 /// Envoie un message à l'IA de la fenêtre ; ouvre le panneau s'il est fermé
 /// (le message part alors dès que la page de l'IA a fini de charger).
+/// Demandes en attente pour le panneau IA en interface Corrtex (le panneau les récupère à son chargement).
+fn native_pending() -> &'static Mutex<HashMap<String, String>> {
+    static M: std::sync::OnceLock<Mutex<HashMap<String, String>>> = std::sync::OnceLock::new();
+    M.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 fn ai_send(app: &AppHandle, win: &str, prompt: String) -> Result<(), String> {
+    // interface Corrtex : la demande s'affiche dans le panneau, l'IA répond en coulisse
+    if state(app).settings.ai_native {
+        let was_open = {
+            let mut b = state(app);
+            let Some(w) = b.windows.get_mut(win) else { return Err("fenêtre introuvable".into()) };
+            let r = w.sidebar_open;
+            w.sidebar_open = true;
+            b.settings.sidebar_open = true;
+            r
+        };
+        native_pending().lock().unwrap_or_else(|e| e.into_inner()).insert(win.to_string(), prompt);
+        ensure_ai(app, win)?;
+        if !was_open {
+            layout(app, win);
+            save_settings(app);
+            broadcast(app);
+        }
+        let _ = app.emit_to(format!("aibar-{win}").as_str(), "native-ask", serde_json::json!({}));
+        return Ok(());
+    }
     let (was_open, created) = {
         let mut b = state(app);
         let Some(w) = b.windows.get_mut(win) else { return Err("fenêtre introuvable".into()) };
@@ -2668,6 +2702,25 @@ async fn ai_compare(app: AppHandle, webview: Webview, ids: Vec<u32>) -> Result<(
     }
     let limit = if ids.len() > 2 { 6000 } else { 8000 };
     read_tabs(&app, &win, "compare", ids, limit)
+}
+
+/// Demande en attente pour le panneau IA (interface Corrtex).
+#[tauri::command]
+async fn ai_native_take(webview: Webview) -> Option<String> {
+    let win = caller_win(&webview);
+    native_pending().lock().unwrap_or_else(|e| e.into_inner()).remove(&win)
+}
+
+/// Panneau IA : interface Corrtex (true) ou site de l'IA (false, par ex. pour se connecter).
+#[tauri::command]
+async fn set_ai_native(app: AppHandle, on: bool) {
+    state(&app).settings.ai_native = on;
+    save_settings(&app);
+    let wins: Vec<String> = state(&app).windows.keys().cloned().collect();
+    for w in wins {
+        layout(&app, &w);
+        let _ = app.emit_to(format!("aibar-{w}").as_str(), "ai-view", serde_json::json!({ "native": on }));
+    }
 }
 
 /// Hauteur de l'en-tête du panneau IA (liste des onglets à comparer dépliée ou non).
@@ -4101,6 +4154,60 @@ async fn ai_quick_result(app: AppHandle, webview: Webview, req: u64, text: Strin
         let text: String = text.chars().take(20000).collect();
         bubble_update(&app, &q, &text, done, error);
     }
+}
+
+
+// ---------------------------------------------------------------- article détaché (fenêtre à part)
+fn reader_store() -> &'static Mutex<HashMap<String, serde_json::Value>> {
+    static M: std::sync::OnceLock<Mutex<HashMap<String, serde_json::Value>>> = std::sync::OnceLock::new();
+    M.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Ouvre l'article de la recherche IA dans sa propre fenêtre, déplaçable n'importe où sur l'écran.
+#[tauri::command]
+async fn reader_open(app: AppHandle, title: String, html: String) -> Result<(), String> {
+    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+    let label = format!("reader-{}", N.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+    let title: String = title.chars().take(120).collect();
+    reader_store().lock().unwrap_or_else(|e| e.into_inner()).insert(label.clone(), serde_json::json!({ "title": title, "html": html.chars().take(400_000).collect::<String>() }));
+    let window = WindowBuilder::new(&app, &label)
+        .title(if title.is_empty() { "Article — Corrtex".to_string() } else { format!("{title} — Corrtex") })
+        .inner_size(760.0, 860.0)
+        .min_inner_size(380.0, 320.0)
+        .shadow(true)
+        .build()
+        .map_err(|e| e.to_string())?;
+    let (w, h) = window
+        .inner_size()
+        .ok()
+        .zip(window.scale_factor().ok())
+        .map(|(s, f)| (s.width as f64 / f, s.height as f64 / f))
+        .unwrap_or((760.0, 860.0));
+    window
+        .add_child(web(format!("{label}-view"), WebviewUrl::App("reader.html".into())), LogicalPosition::new(0.0, 0.0), LogicalSize::new(w, h))
+        .map_err(|e| e.to_string())?;
+    // la page suit la taille de la fenêtre
+    let app2 = app.clone();
+    let l2 = label.clone();
+    window.on_window_event(move |ev| match ev {
+        WindowEvent::Resized(size) => {
+            if let (Some(win), Some(v)) = (app2.get_window(&l2), app2.get_webview(&format!("{l2}-view"))) {
+                let f = win.scale_factor().unwrap_or(1.0);
+                set_bounds(&v, LogicalPosition::new(0.0, 0.0), LogicalSize::new(size.width as f64 / f, size.height as f64 / f));
+            }
+        }
+        WindowEvent::Destroyed => {
+            reader_store().lock().unwrap_or_else(|e| e.into_inner()).remove(&l2);
+        }
+        _ => {}
+    });
+    Ok(())
+}
+
+#[tauri::command]
+async fn reader_get(webview: Webview) -> serde_json::Value {
+    let label = webview.label().trim_end_matches("-view").to_string();
+    reader_store().lock().unwrap_or_else(|e| e.into_inner()).get(&label).cloned().unwrap_or(serde_json::Value::Null)
 }
 
 // ---------------------------------------------------------------- génération d'images (ChatGPT / Gemini, sans API)
@@ -5681,6 +5788,7 @@ async fn app_info(app: AppHandle) -> serde_json::Value {
         "power_mode": b.settings.power_mode,
         "auto_update": b.settings.auto_update,
         "keep_running": b.settings.keep_running,
+        "ai_native": b.settings.ai_native,
         "power_saver": power_saver(&b),
         "on_battery": b.on_battery,
     })
@@ -6110,12 +6218,24 @@ fn debug_log(msg: &str) {
 }
 
 // ---------------------------------------------------------------- commandes (interface)
+/// Dernière fenêtre de navigation qui a eu le focus.
+static LAST_FOCUSED: Mutex<String> = Mutex::new(String::new());
+
 fn caller_win(webview: &Webview) -> String {
     let label = webview.window().label().to_string();
     // liste de suggestions (fenêtre flottante "sugw-wN") : elle agit pour la fenêtre "wN"
     for p in ["sugw-", "popw-", "prvw-", "panw-"] {
         if let Some(w) = label.strip_prefix(p) {
             return w.to_string();
+        }
+    }
+    // article détaché : ses liens s'ouvrent dans la dernière fenêtre de navigation utilisée
+    if label.starts_with("reader-") {
+        let app = webview.app_handle();
+        let b = state(app);
+        let last = LAST_FOCUSED.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Some(w) = Some(last).filter(|w| b.windows.contains_key(w)).or_else(|| b.windows.keys().next().cloned()) {
+            return w;
         }
     }
     label
@@ -6259,6 +6379,8 @@ async fn toggle_sidebar(app: AppHandle, webview: Webview) -> Result<(), String> 
 #[tauri::command]
 async fn set_ai_provider(app: AppHandle, id: String) -> Result<(), String> {
     let p = provider(&id);
+    // les sessions cachées préparées pour l'ancienne IA ne servent plus
+    quick_fresh().lock().unwrap_or_else(|e| e.into_inner()).clear();
     let wins: Vec<String> = {
         let mut b = state(&app);
         b.settings.ai_provider = p.id.to_string();
@@ -6819,6 +6941,15 @@ async fn tab_event(app: AppHandle, webview: Webview, kind: String, data: serde_j
                 let _ = quick_ask_to(&app, &win, id, req, prompt, Some("__corrtexPageCmpAI"));
             }
         }
+        // question à l'IA cachée depuis une page (panneau YouTube…) : réponse dans __corrtexPageAI
+        "page_ai" => {
+            let take = |k: &str, n: usize| data.get(k).and_then(|v| v.as_str()).unwrap_or("").chars().take(n).collect::<String>();
+            let req: String = take("req", 30).chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+            let prompt = take("prompt", 12000);
+            if let Some(win) = win_of_tab(&app, id) {
+                let _ = quick_ask_slot(&app, &win, 1, id, req, prompt, Some("__corrtexPageAI"));
+            }
+        }
         "page_cmp_done" => {
             let take = |k: &str, n: usize| data.get(k).and_then(|v| v.as_str()).unwrap_or("").chars().take(n).collect::<String>();
             let private = win_of_tab(&app, id).and_then(|w| state(&app).windows.get(&w).map(|w| w.private)).unwrap_or(false);
@@ -7116,6 +7247,10 @@ fn main() {
             ai_image,
             agent_kind,
             shop_ai_warm,
+            ai_native_take,
+            reader_open,
+            reader_get,
+            set_ai_native,
             ai_image_result,
             shop_sites_set,
             shop_sites_reset,

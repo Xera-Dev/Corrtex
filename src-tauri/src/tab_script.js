@@ -1285,6 +1285,203 @@
     if (document.documentElement) add(); else document.addEventListener('DOMContentLoaded', add);
   })();
 
+  // ---------------------------------------------------------------- YouTube : panneau IA à côté de la vidéo
+  // Sur une page de vidéo, un panneau Corrtex prend la tête de la colonne de droite : résumé,
+  // moments clés, vidéos similaires, questions. L'IA travaille en coulisse (page cachée, sans clé).
+  (function () {
+    if (!/(^|\.)youtube\.com$/.test(location.hostname) || window.top !== window) return;
+    var host = null, root = null, curVid = '', out = null, busyReq = '', ctx = null, mode = '';
+    function vid() { try { return new URL(location.href).searchParams.get('v') || ''; } catch (e) { return ''; } }
+    function dark() { return document.documentElement.hasAttribute('dark') || matchMedia('(prefers-color-scheme: dark)').matches; }
+    function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+    var ac = '#ff4f7b';
+    try { ac = cxTheme().accent || ac; } catch (e) {}
+    var ICON = {
+      spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>',
+      sum: '<path d="M6 4.5h8l4 4v11H6z"/><path d="M14 4.5v4h4M9 12.5h6M9 15.5h4"/>',
+      keys: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+      sim: '<rect x="3.5" y="5.5" width="11" height="8" rx="2"/><rect x="9.5" y="10.5" width="11" height="8" rx="2"/>',
+      ask: '<path d="M5 18.5V7a2.5 2.5 0 0 1 2.5-2.5h9A2.5 2.5 0 0 1 19 7v6a2.5 2.5 0 0 1-2.5 2.5H9z"/><path d="M10 9.5a2 2 0 1 1 2.6 1.9c-.4.1-.6.5-.6.9M12 14h.01"/>'
+    };
+    function svg(p) { return '<svg viewBox="0 0 24 24">' + p + '</svg>'; }
+    function css() {
+      var d = dark(), fg = d ? '#f1f1f1' : '#0f0f0f', dim = d ? 'rgba(241,241,241,.62)' : 'rgba(15,15,15,.6)';
+      var glass = d ? 'rgba(255,255,255,.07)' : 'rgba(0,0,0,.04)', border = d ? 'rgba(255,255,255,.16)' : 'rgba(0,0,0,.1)', hover = d ? 'rgba(255,255,255,.12)' : 'rgba(0,0,0,.07)';
+      return ':host { all: initial; display: block; margin: 0 0 14px; font-family: "Roboto", "Segoe UI", system-ui, sans-serif; color: ' + fg + '; }' +
+        '.p { position: relative; overflow: hidden; border-radius: 16px; padding: 14px; background: linear-gradient(160deg, color-mix(in srgb, ' + ac + ' 16%, ' + (d ? '#1d1d1f' : '#fff') + '), ' + (d ? '#181818' : '#fafafa') + ');' +
+        ' border: 1px solid ' + border + '; box-shadow: 0 8px 24px rgba(0,0,0,' + (d ? '.35' : '.08') + '), inset 0 1px 0 rgba(255,255,255,.08); }' +
+        '.h { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }' +
+        '.h svg { width: 18px; height: 18px; color: ' + ac + '; }' +
+        '.h small { margin-left: auto; font-weight: 400; font-size: 12px; color: ' + dim + '; }' +
+        'svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }' +
+        '.g { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }' +
+        '.b { all: unset; display: flex; align-items: center; gap: 8px; padding: 10px 11px; border-radius: 12px; font-size: 13px; font-weight: 500; cursor: pointer; background: ' + glass + '; border: 1px solid ' + border + '; }' +
+        '.b:hover { background: ' + hover + '; } .b.on { border-color: ' + ac + '; background: color-mix(in srgb, ' + ac + ' 18%, transparent); }' +
+        '.b svg { width: 17px; height: 17px; flex: none; color: ' + ac + '; }' +
+        '.o { margin-top: 12px; font-size: 13.5px; line-height: 1.55; max-height: 420px; overflow-y: auto; }' +
+        '.o:empty { display: none; }' +
+        '.o p + p, .o ul, .o h4 { margin-top: 8px; } .o p, .o ul, .o h4 { margin-bottom: 0; } .o ul { padding-left: 18px; } .o h4 { font-size: 13.5px; }' +
+        '.o .ts { all: unset; cursor: pointer; font-weight: 600; color: ' + ac + '; } .o .ts:hover { text-decoration: underline; }' +
+        '.o .err { color: #ff6b81; } .o .dim { color: ' + dim + '; font-size: 12.5px; }' +
+        '.dots { display: inline-flex; gap: 5px; } .dots i { width: 7px; height: 7px; border-radius: 50%; background: ' + dim + '; animation: d 1s ease-in-out infinite; }' +
+        '.dots i:nth-child(2) { animation-delay: .15s; } .dots i:nth-child(3) { animation-delay: .3s; } @keyframes d { 50% { transform: translateY(-4px); opacity: .5; } }' +
+        '.v { all: unset; display: flex; gap: 10px; padding: 6px; border-radius: 12px; cursor: pointer; } .v:hover { background: ' + hover + '; }' +
+        '.v .im { position: relative; width: 140px; aspect-ratio: 16/9; border-radius: 9px; overflow: hidden; flex: none; background: ' + glass + '; }' +
+        '.v img { width: 100%; height: 100%; object-fit: cover; display: block; }' +
+        '.v .du { position: absolute; right: 4px; bottom: 4px; font-size: 11px; font-weight: 600; padding: 1px 5px; border-radius: 5px; background: rgba(0,0,0,.78); color: #fff; }' +
+        '.v .t { font-size: 13px; font-weight: 500; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }' +
+        '.v .c { font-size: 12px; color: ' + dim + '; margin-top: 4px; }' +
+        '.q { display: flex; gap: 6px; margin-top: 10px; } .q input { all: unset; flex: 1; min-width: 0; padding: 9px 12px; border-radius: 12px; font-size: 13px; background: ' + glass + '; border: 1px solid ' + border + '; }' +
+        '.q input:focus { border-color: ' + ac + '; } .q button { all: unset; padding: 0 14px; border-radius: 12px; font-size: 13px; font-weight: 600; cursor: pointer; background: ' + fg + '; color: ' + (d ? '#0f0f0f' : '#fff') + '; }';
+    }
+    function build() {
+      host = document.createElement('corrtex-yt');
+      root = host.attachShadow({ mode: 'open' });
+      root.innerHTML = '<style>' + css() + '</style><div class="p"><div class="h">' + svg(ICON.spark) + 'Corrtex IA<small>sur cette vidéo</small></div>' +
+        '<div class="g"><button class="b" data-a="sum">' + svg(ICON.sum) + 'Résumer</button><button class="b" data-a="keys">' + svg(ICON.keys) + 'Moments clés</button>' +
+        '<button class="b" data-a="sim">' + svg(ICON.sim) + 'Vidéos similaires</button><button class="b" data-a="ask">' + svg(ICON.ask) + 'Poser une question</button></div>' +
+        '<div class="o"></div></div>';
+      out = root.querySelector('.o');
+      root.addEventListener('click', function (e) {
+        var b = e.target.closest('.b');
+        if (b) { run(b.getAttribute('data-a')); return; }
+        var ts = e.target.closest('.ts');
+        if (ts) { var v = document.querySelector('video'); if (v) { v.currentTime = +ts.getAttribute('data-s'); v.play && v.play(); } return; }
+        var vv = e.target.closest('.v');
+        if (vv) { location.href = '/watch?v=' + vv.getAttribute('data-id'); }
+      });
+    }
+    function setOn(a) { root.querySelectorAll('.b').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-a') === a); }); }
+    function place() {
+      if (!/^\/watch/.test(location.pathname)) { if (host) host.remove(); return; }
+      var sec = document.querySelector('#secondary-inner') || document.querySelector('#secondary');
+      if (!sec) return;
+      var v = vid();
+      if (!host) build();
+      if (curVid !== v) { curVid = v; ctx = null; busyReq = ''; mode = ''; out.innerHTML = ''; setOn(''); root.querySelector('style').textContent = css(); }
+      // en tête de la colonne de droite, à la place de la première vidéo proposée
+      var rel = sec.querySelector('#related');
+      if (!host.isConnected || host.parentNode !== sec) { if (rel && rel.parentNode === sec) sec.insertBefore(host, rel); else sec.prepend(host); }
+    }
+    document.addEventListener('yt-navigate-finish', function () { setTimeout(place, 300); });
+    // les raccourcis clavier de YouTube ne doivent pas capter la saisie dans le panneau
+    ['keydown', 'keypress', 'keyup'].forEach(function (k) {
+      window.addEventListener(k, function (e) {
+        var t = e.composedPath && e.composedPath()[0];
+        if (root && t && t.tagName === 'INPUT' && root.contains(t)) e.stopImmediatePropagation();
+      }, true);
+    });
+    setInterval(place, 1500);
+
+    // ------------------------------------------------ contexte : titre, chaîne, description, transcription
+    function fmt(s) { s = Math.floor(s); var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); }
+    function context() {
+      if (ctx && ctx.v === curVid) return Promise.resolve(ctx);
+      var pr = null;
+      try { var mp = document.getElementById('movie_player'); pr = mp && mp.getPlayerResponse ? mp.getPlayerResponse() : null; } catch (e) {}
+      if (!pr || !pr.videoDetails || pr.videoDetails.videoId !== curVid) { try { pr = window.ytInitialPlayerResponse; } catch (e) {} }
+      var vd = (pr && pr.videoDetails && pr.videoDetails.videoId === curVid) ? pr.videoDetails : {};
+      var title = vd.title || (document.querySelector('h1.ytd-watch-metadata, #title h1') || {}).textContent || document.title.replace(/ - YouTube$/, '');
+      var c = { v: curVid, title: String(title).trim(), channel: vd.author || '', desc: String(vd.shortDescription || '').slice(0, 2500), length: +vd.lengthSeconds || 0, transcript: '' };
+      var tracks = (((pr || {}).captions || {}).playerCaptionsTracklistRenderer || {}).captionTracks || [];
+      var pick = tracks.find(function (t) { return /^fr/.test(t.languageCode) && t.kind !== 'asr'; }) || tracks.find(function (t) { return /^fr/.test(t.languageCode); }) ||
+        tracks.find(function (t) { return /^en/.test(t.languageCode); }) || tracks[0];
+      if (!pick || !pick.baseUrl) { ctx = c; return Promise.resolve(c); }
+      return fetch(pick.baseUrl + '&fmt=json3', { credentials: 'include' }).then(function (r) { return r.json(); }).then(function (j) {
+        var lines = [], lastT = -999, buf = '';
+        (j.events || []).forEach(function (ev) {
+          var t = (ev.tStartMs || 0) / 1000, txt = (ev.segs || []).map(function (s) { return s.utf8 || ''; }).join('').replace(/\s+/g, ' ').trim();
+          if (!txt) return;
+          if (t - lastT >= 25) { if (buf) lines.push(buf); buf = '[' + fmt(t) + '] ' + txt; lastT = t; } else buf += ' ' + txt;
+        });
+        if (buf) lines.push(buf);
+        var full = lines.join('\n');
+        // trop long : on garde des passages répartis sur toute la vidéo
+        if (full.length > 9000) { var step = Math.ceil(lines.length / Math.floor(lines.length * 9000 / full.length)); full = lines.filter(function (_, i) { return i % step === 0; }).join('\n'); }
+        c.transcript = full;
+        ctx = c;
+        return c;
+      }).catch(function () { ctx = c; return c; });
+    }
+
+    // ------------------------------------------------ réponses de l'IA
+    function render(text) {
+      var html = '', ul = false;
+      String(text).split('\n').forEach(function (raw) {
+        var l = raw.trim();
+        if (!l) return;
+        var li = l.match(/^(?:[-*•]|\d+[.)])\s+(.*)/);
+        if (!li && ul) { html += '</ul>'; ul = false; }
+        var inl = esc(li ? li[1] : l.replace(/^#{1,4}\s*/, '')).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+          .replace(/[\[(]?\b((?:\d{1,2}:)?\d{1,2}:\d{2})\b[\])]?/g, function (m, t) { var p = t.split(':').map(Number), s = p.reduce(function (a, b) { return a * 60 + b; }, 0); return '<button class="ts" data-s="' + s + '">' + t + '</button>'; });
+        if (li) { if (!ul) { html += '<ul>'; ul = true; } html += '<li>' + inl + '</li>'; }
+        else if (/^#{1,4}\s/.test(l)) html += '<h4>' + inl + '</h4>';
+        else html += '<p>' + inl + '</p>';
+      });
+      if (ul) html += '</ul>';
+      return html;
+    }
+    window.__corrtexPageAI = function (req, text, done, error) {
+      if (req !== busyReq) return;
+      if (text) out.innerHTML = render(text) + (done ? '' : '<p><span class="dots"><i></i><i></i><i></i></span></p>');
+      if (done || error) {
+        busyReq = '';
+        if (!text) out.innerHTML = '<p class="err">Pas de réponse de l’IA. Vérifiez que vous êtes connecté à l’IA du panneau.</p>';
+      }
+    };
+    function askAI(instr, extra) {
+      out.innerHTML = '<p><span class="dots"><i></i><i></i><i></i></span> <span class="dim">Lecture de la vidéo…</span></p>';
+      context().then(function (c) {
+        var src = 'Vidéo YouTube : « ' + c.title + ' »' + (c.channel ? ' (chaîne ' + c.channel + ')' : '') + (c.length ? ', durée ' + fmt(c.length) : '') + '.\n' +
+          (c.desc ? 'Description :\n' + c.desc + '\n' : '') +
+          (c.transcript ? '\nTranscription (avec les horodatages) :\n' + c.transcript + '\n' : '\n(Pas de transcription disponible : appuie-toi sur le titre et la description.)\n');
+        busyReq = 'yt' + Date.now().toString(36);
+        send('page_ai', { req: busyReq, prompt: (src + '\n' + instr + (extra ? '\n' + extra : '') + '\nRéponds en français, sans introduction.').slice(0, 12000) });
+      });
+    }
+    function similar() {
+      out.innerHTML = '<p><span class="dots"><i></i><i></i><i></i></span> <span class="dim">Recherche de vidéos similaires…</span></p>';
+      context().then(function (c) {
+        var q = c.title.replace(/[|\-–—:!?#()[\]"«»]+/g, ' ').replace(/\b(official|officiel(le)?|video|vidéo|clip|4k|hd|full|episode|épisode)\b/gi, ' ').replace(/\s+/g, ' ').trim().split(' ').slice(0, 7).join(' ');
+        return fetch('/results?search_query=' + encodeURIComponent(q), { credentials: 'include' }).then(function (r) { return r.text(); }).then(function (h) {
+          var m = h.match(/var ytInitialData = (\{.+?\});<\/script>/s);
+          var data = m ? JSON.parse(m[1]) : {};
+          var list = [];
+          (function walk(o, d) {
+            if (!o || typeof o !== 'object' || d > 30 || list.length >= 8) return;
+            if (o.videoRenderer && o.videoRenderer.videoId) { list.push(o.videoRenderer); return; }
+            for (var k in o) walk(o[k], d + 1);
+          })(data, 0);
+          list = list.filter(function (v) { return v.videoId !== curVid; }).slice(0, 6);
+          if (!list.length) { out.innerHTML = '<p class="dim">Aucune vidéo similaire trouvée.</p>'; return; }
+          var txt = function (x) { return x ? (x.simpleText || (x.runs || []).map(function (r) { return r.text; }).join('')) : ''; };
+          out.innerHTML = list.map(function (v) {
+            var th = (v.thumbnail && v.thumbnail.thumbnails || []).slice(-1)[0];
+            return '<button class="v" data-id="' + esc(v.videoId) + '"><span class="im">' + (th ? '<img alt="" loading="lazy" src="' + esc(th.url) + '">' : '') + (v.lengthText ? '<span class="du">' + esc(txt(v.lengthText)) + '</span>' : '') + '</span>' +
+              '<span><span class="t">' + esc(txt(v.title)) + '</span><span class="c">' + esc([txt(v.ownerText), txt(v.shortViewCountText), txt(v.publishedTimeText)].filter(Boolean).join(' · ')) + '</span></span></button>';
+          }).join('');
+        });
+      }).catch(function () { out.innerHTML = '<p class="err">Recherche impossible pour le moment.</p>'; });
+    }
+    function run(a) {
+      mode = a;
+      setOn(a);
+      if (a === 'sum') askAI('Résume cette vidéo : une phrase d’accroche, puis 4 à 6 points essentiels (avec l’horodatage où on en parle, au format 12:34, si tu as la transcription), puis une phrase de conclusion.');
+      else if (a === 'keys') askAI('Donne les moments clés de la vidéo sous forme de liste chronologique : « 12:34 — ce qui se passe », 5 à 10 éléments. Sans transcription, propose les grandes parties probables sans horodatage.');
+      else if (a === 'sim') similar();
+      else if (a === 'ask') {
+        out.innerHTML = '<div class="q"><input placeholder="Votre question sur la vidéo…" maxlength="300"><button>Demander</button></div>';
+        var inp = out.querySelector('input');
+        var go = function () { var v = inp.value.trim(); if (v) askAI('Réponds à cette question sur la vidéo, en citant les horodatages utiles (format 12:34) : ' + v); };
+        out.querySelector('button').onclick = go;
+        inp.addEventListener('keydown', function (e) { e.stopPropagation(); if (e.key === 'Enter') go(); });
+        inp.addEventListener('keyup', function (e) { e.stopPropagation(); });
+        inp.addEventListener('keypress', function (e) { e.stopPropagation(); });
+        setTimeout(function () { inp.focus(); }, 30);
+      }
+    }
+  })();
+
   // ---------------------------------------------------------------- comparer les articles de la page
   // Bouton « Comparer les articles de la page » du panneau IA : les articles affichés sur la page
   // (données structurées, sinon cartes avec prix, lien et image) sont envoyés à l'IA avec les besoins

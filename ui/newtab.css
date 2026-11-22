@@ -473,9 +473,10 @@ body.ai-open #widgets, body.ai-open #player { opacity: 0; pointer-events: none; 
 .ai-panel header { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14.5px; flex: none; }
 .ai-panel header > svg { width: 19px; height: 19px; color: var(--l1, #ff4f7b); }
 .ai-panel header small { color: var(--fg-dim); font-weight: 400; font-size: 12.5px; }
-#ai-close { margin-left: auto; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--fg-dim); }
-#ai-close:hover { background: var(--hover); color: var(--fg); }
-#ai-close svg { width: 17px; height: 17px; }
+#ai-wide { margin-left: auto; }
+.ai-hb, #ai-close { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--fg-dim); }
+.ai-hb:hover, #ai-close:hover { background: var(--hover); color: var(--fg); }
+.ai-hb svg, #ai-close svg { width: 17px; height: 17px; }
 #ai-thread { overflow-y: auto; margin: 12px -6px 0; padding: 0 6px; flex: 1; min-height: 0; }
 .ai-q { margin: 14px 0 8px; display: flex; justify-content: flex-end; }
 .ai-q:first-child { margin-top: 0; }
@@ -592,3 +593,14 @@ body.ai-open #widgets, body.ai-open #player { opacity: 0; pointer-events: none; 
 .news .caret { display: inline-block; width: 8px; height: 1em; vertical-align: -2px; margin-left: 2px; background: var(--fg); animation: dots 1s steps(2) infinite; opacity: .6; }
 @keyframes dots { 50% { opacity: 0; } }
 .ai-src .lbl { font-size: 12px; color: var(--fg-dim); align-self: center; margin-right: 2px; }
+
+.news .note { margin-top: 12px; font: 12.5px/1.4 "Segoe UI", system-ui, sans-serif; color: var(--fg-dim); }
+
+/* panneau agrandi */
+body.ai-open.ai-wide main { width: min(1120px, 94vw); top: 24px; }
+body.ai-wide .logo { font-size: 0; margin: 0; opacity: 0; }
+body.ai-wide .ai-panel { max-height: calc(100vh - 130px); }
+body.ai-wide .news figure img { max-height: 340px; }
+body.ai-wide .news h1 { font-size: 33px; }
+body.ai-wide .news .body { font-size: 16.5px; column-gap: 34px; }
+body.ai-wide #ai-wide svg path { d: path("M4 10h6V4M20 14h-6v6M10 10L3 3M14 14l7 7"); }

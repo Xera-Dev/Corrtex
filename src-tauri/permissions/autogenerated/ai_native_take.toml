@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ai-native-take"
+description = "Enables the ai_native_take command without any pre-configured scope."
+commands.allow = ["ai_native_take"]
+
+[[permission]]
+identifier = "deny-ai-native-take"
+description = "Denies the ai_native_take command without any pre-configured scope."
+commands.deny = ["ai_native_take"]

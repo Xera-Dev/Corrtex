@@ -105,6 +105,63 @@
   #pcmp .ex button:hover { color: var(--fg); background: var(--hover); }
   #pcmp .foot { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
   #pcmp .note { flex: 1; font-size: 11.5px; color: var(--fg-dim); line-height: 1.3; }
+
+  /* ---------------------------------------------------------------- interface Corrtex (discussion) */
+  #chat, #composer { display: none; }
+  body.native { padding-bottom: 12px; }
+  body.native #chat { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; margin-right: -4px; padding-right: 4px; }
+  body.native #composer { display: flex; }
+  body.native #skin { display: none; }
+  body.native.agent-on #chat, body.native.agent-on #composer { display: none; }
+  body.native.agent-on #agent { flex: 1; min-height: 0; overflow-y: auto; }
+  #welcome { margin: auto 0; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 20px 6px; }
+  #welcome[hidden] { display: none; }
+  .wl-ic { width: 54px; height: 54px; border-radius: 18px; display: grid; place-items: center; margin-bottom: 6px;
+    background: color-mix(in srgb, var(--l1, #ff4f7b) 20%, transparent); color: var(--l1, #ff4f7b); box-shadow: 0 10px 30px color-mix(in srgb, var(--l1, #ff4f7b) 25%, transparent); }
+  .wl-ic svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
+  #welcome b { font-size: 17px; font-weight: 600; }
+  #welcome small { font-size: 12.5px; color: var(--fg-dim); }
+  .wl-ex { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; width: 100%; }
+  .wl-ex button { text-align: left; padding: 10px 14px; border-radius: 14px; font-size: 13px; color: var(--fg); background: var(--glass); border: 1px solid var(--glass-border); }
+  .wl-ex button:hover { background: var(--hover); }
+  #msgs { display: flex; flex-direction: column; gap: 12px; padding-bottom: 6px; }
+  .m-u { align-self: flex-end; max-width: 88%; padding: 9px 13px; border-radius: 16px 16px 5px 16px; font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+    background: color-mix(in srgb, var(--l1, #ff4f7b) 22%, transparent); border: 1px solid color-mix(in srgb, var(--l1, #ff4f7b) 40%, transparent); }
+  .m-u.long { font-size: 12.5px; color: var(--fg-dim); }
+  .m-a { padding: 13px 15px; border-radius: 18px; font-size: 13.8px; line-height: 1.58; user-select: text; -webkit-user-select: text;
+    background: var(--glass); border: 1px solid var(--glass-border); box-shadow: inset 0 1px 0 rgba(255,255,255,.06); }
+  .m-a p + p, .m-a ul, .m-a ol, .m-a pre, .m-a h4 { margin-top: 8px; }
+  .m-a ul, .m-a ol { padding-left: 20px; }
+  .m-a h4 { font-size: 14px; font-weight: 650; }
+  .m-a code { font: 12.5px Consolas, "SF Mono", monospace; padding: 1px 5px; border-radius: 5px; background: rgba(127,127,127,.18); }
+  .m-a pre { padding: 10px 12px; border-radius: 12px; background: rgba(0,0,0,.28); overflow-x: auto; }
+  .m-a pre code { padding: 0; background: none; }
+  .m-a a { color: color-mix(in srgb, var(--l1, #ff4f7b) 40%, var(--fg)); }
+  .m-a .err { color: color-mix(in srgb, #ff7a8a 85%, var(--fg)); }
+  .m-a .tools { display: flex; gap: 4px; margin-top: 10px; }
+  .m-a .tools button { height: 26px; padding: 0 9px; border-radius: 13px; font-size: 11.5px; color: var(--fg-dim); background: transparent; border: 1px solid var(--glass-border); }
+  .m-a .tools button:hover { color: var(--fg); background: var(--hover); }
+  .m-a .tools button.site { color: var(--fg); border-color: color-mix(in srgb, var(--l1, #ff4f7b) 55%, transparent); }
+  .dots3 { display: inline-flex; gap: 5px; padding: 4px 0; }
+  .dots3 i { width: 7px; height: 7px; border-radius: 50%; background: var(--fg-dim); animation: d3 1s ease-in-out infinite; }
+  .dots3 i:nth-child(2) { animation-delay: .15s; } .dots3 i:nth-child(3) { animation-delay: .3s; }
+  @keyframes d3 { 50% { transform: translateY(-4px); opacity: .5; } }
+  #composer { align-items: flex-end; gap: 6px; margin-top: 10px; padding: 6px; border-radius: 22px; flex: none;
+    background: var(--glass); border: 1px solid var(--glass-border); box-shadow: 0 6px 20px rgba(0,0,0,.18); }
+  #composer:focus-within { border-color: color-mix(in srgb, var(--l1, #ff4f7b) 55%, var(--glass-border)); }
+  #cin { flex: 1; min-width: 0; resize: none; max-height: 160px; padding: 8px 4px; background: none; border: 0; outline: 0; color: var(--fg); font: inherit; font-size: 14px; line-height: 1.4; }
+  #cin::placeholder { color: var(--fg-dim); }
+  #composer button { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+  #composer button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  #cnew { color: var(--fg-dim); } #cnew:hover { background: var(--hover); color: var(--fg); }
+  #csend { background: var(--fg); color: var(--page-1); }
+  #csend:disabled { opacity: .35; }
+  .ahist-h { margin-top: 14px; font-size: 12px; color: var(--fg-dim); }
+  #agent-hist { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+  #agent-hist button { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 9px 12px; border-radius: 12px; background: var(--glass); border: 1px solid var(--hover); color: var(--fg); }
+  #agent-hist button:hover { background: var(--hover); }
+  #agent-hist b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #agent-hist small { font-size: 11.5px; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
 </head>
 <body>
@@ -129,6 +186,7 @@
     <button id="pcmp-btn" class="mi"><svg viewBox="0 0 24 24"><path d="M4 5h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h7.6a1.5 1.5 0 0 0 1.5-1.1L20 9H7"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/><path d="M12 3.5l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z"/></svg><span><b>Comparer les articles de la page</b><small>Les meilleurs choix selon vos besoins</small></span></button>
     <button id="cmp-btn" class="mi"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="7" height="14" rx="1.5"/><rect x="13.5" y="5" width="7" height="14" rx="1.5"/><path d="M5.8 9h2.4M15.8 9h2.4M5.8 12h2.4M15.8 12h2.4"/></svg><span><b>Comparer des onglets</b><small>2 ou 3 pages côte à côte</small></span></button>
     <button id="agent-btn" class="mi"><svg viewBox="0 0 24 24"><path d="M5 4.5l5.5 14 2-5.8 5.8-2z"/><path d="M13 13l5.5 5.5"/><path d="M18.5 3.5v3M17 5h3"/></svg><span><b>Agent</b><small>L’IA agit sur la page, vous validez chaque action</small></span></button>
+    <button id="view-btn" class="mi"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.6 3.6 5.4 3.6 8.5s-1.2 5.9-3.6 8.5c-2.4-2.6-3.6-5.4-3.6-8.5s1.2-5.9 3.6-8.5z"/></svg><span><b id="view-t">Afficher le site de l’IA</b><small id="view-s">Pour vous connecter ou retrouver vos discussions</small></span></button>
     <button id="skin" class="mi"><svg viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.1 0 1.7-.9 1.4-1.9-.3-1 .4-2 1.5-2h2a3.6 3.6 0 0 0 3.6-3.6c0-5.3-3.8-9.5-8.5-9.5z"/><circle cx="7.8" cy="11" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="15" cy="7.8" r="1"/></svg><span><b>Style Corrtex sur l’IA</b><small>Habille la page de l’IA aux couleurs de Corrtex</small></span></button>
   </div>
   <div id="pcmp" hidden>
@@ -160,7 +218,25 @@
       <button id="agent-cancel" class="chip">Annuler</button>
       <button id="agent-go" class="chip sel" disabled>Lancer</button>
     </div>
+    <div class="ahist-h" id="agent-hist-h" hidden>Recherches récentes de l’agent</div>
+    <div id="agent-hist"></div>
   </div>
+
+  <!-- interface Corrtex : discussion avec l'IA (qui répond en coulisse, dans une page cachée) -->
+  <div id="chat">
+    <div id="welcome">
+      <div class="wl-ic"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg></div>
+      <b>Comment puis-je vous aider ?</b>
+      <small id="wl-who"></small>
+      <div class="wl-ex" id="wl-ex"></div>
+    </div>
+    <div id="msgs"></div>
+  </div>
+  <form id="composer" autocomplete="off">
+    <button type="button" id="cnew" title="Nouvelle discussion"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    <textarea id="cin" rows="1" placeholder="Demandez n’importe quoi…" spellcheck="false"></textarea>
+    <button id="csend" title="Envoyer (Entrée)"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
+  </form>
 
   <script>
     (function () {
@@ -173,6 +249,9 @@
       function render(s) {
         if (!s || (s.win && s.win !== C.win())) return;
         current = s.ai_provider;
+        const pv = (s.providers || []).find((p) => p.id === current);
+        const who = document.getElementById('wl-who');
+        if (who && pv) who.textContent = 'Réponses de ' + pv.name + ', affichées par Corrtex';
         document.getElementById('skin').classList.toggle('on', s.ai_skin !== false);
         box.replaceChildren();
         for (const p of s.providers || []) {
@@ -210,6 +289,7 @@
       const pcmp = document.getElementById('pcmp');
       function closeAll() {
         for (const el of [menu, pcmp, document.getElementById('cmp'), document.getElementById('agent')]) el.hidden = true;
+        document.body.classList.remove('agent-on');
         for (const b of document.querySelectorAll('.mi')) b.classList.remove('on');
       }
       function toggleMenu(show) {
@@ -265,6 +345,8 @@
       const cmpBtn = document.getElementById('cmp-btn'), cmpGo = document.getElementById('cmp-go');
       let picked = [], lastState = null;
       function fit() {
+        // interface Corrtex : le panneau occupe déjà toute la hauteur
+        if (document.body.classList.contains('native')) return;
         // l'en-tête grandit juste assez pour montrer la liste
         const open = [menu, pcmp, cmp, agentBox].find((el) => !el.hidden) || null;
         const extra = open ? Math.ceil(open.getBoundingClientRect().height) + 4 : 0;
@@ -337,6 +419,9 @@
         if (show) closeAll();
         agentBox.hidden = !show;
         agentBtn.classList.toggle('on', show);
+        // interface Corrtex : le panneau de l'agent remplace la discussion
+        document.body.classList.toggle('agent-on', show);
+        if (show) agentHistory();
         requestAnimationFrame(fit);
         if (show) setTimeout(() => goal.focus(), 60);
       }
@@ -360,6 +445,150 @@
         renderCmp();
       });
       C.invoke('get_state').then((s) => { lastState = s; const tab = s && (s.tabs || []).find((t) => t.id === s.active); sum.disabled = !(tab && tab.url); document.getElementById('pcmp-btn').disabled = !(tab && /^https?:/.test(tab.url || '')); });
+      // ---------------------------------------------------------------- interface Corrtex : discussion
+      const msgs = document.getElementById('msgs'), cin = document.getElementById('cin'), welcome = document.getElementById('welcome');
+      const chatBox = document.getElementById('chat');
+      const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      let history = [];
+      try { history = JSON.parse(localStorage.getItem('corrtex.aichat') || '[]').slice(-30); } catch (e) {}
+      const saveHist = () => { try { localStorage.setItem('corrtex.aichat', JSON.stringify(history.slice(-30))); } catch (e) {} };
+      function md(t) {
+        const parts = String(t).split(/```/);
+        return parts.map((chunk, i) => {
+          if (i % 2) return '<pre><code>' + esc(chunk.replace(/^\w*\n/, '')) + '</code></pre>';
+          let out = '', list = '';
+          const close = () => { if (list) { out += '</' + list + '>'; list = ''; } };
+          for (const raw of chunk.split('\n')) {
+            const l = raw.trimEnd();
+            if (!l.trim()) { close(); continue; }
+            const inl = (x) => esc(x).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<i>$2</i>')
+              .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2">$1</a>');
+            let m;
+            if ((m = l.match(/^#{1,4}\s+(.*)/))) { close(); out += '<h4>' + inl(m[1]) + '</h4>'; }
+            else if ((m = l.match(/^\s*[-*•]\s+(.*)/))) { if (list !== 'ul') { close(); out += '<ul>'; list = 'ul'; } out += '<li>' + inl(m[1]) + '</li>'; }
+            else if ((m = l.match(/^\s*\d+[.)]\s+(.*)/))) { if (list !== 'ol') { close(); out += '<ol>'; list = 'ol'; } out += '<li>' + inl(m[1]) + '</li>'; }
+            else { close(); out += '<p>' + inl(l) + '</p>'; }
+          }
+          close();
+          return out;
+        }).join('');
+      }
+      // une demande venue d'un outil (résumé, comparaison…) contient tout le texte de la page : on n'en montre que le début
+      const label = (t) => { const one = String(t).trim(); return one.length > 220 ? one.slice(0, 200).replace(/\s\S*$/, '') + '…' : one; };
+      function addUser(text) {
+        const d = document.createElement('div');
+        d.className = 'm-u' + (text.length > 220 ? ' long' : '');
+        d.textContent = label(text);
+        msgs.appendChild(d);
+      }
+      function addAnswer(m) {
+        const d = document.createElement('div');
+        d.className = 'm-a';
+        d.innerHTML = m.text ? md(m.text) : m.error ? '<p class="err">' + esc(m.error) + '</p>' : '<span class="dots3"><i></i><i></i><i></i></span>';
+        msgs.appendChild(d);
+        return d;
+      }
+      function tools(d, m) {
+        const t = document.createElement('div');
+        t.className = 'tools';
+        const copy = document.createElement('button'); copy.type = 'button'; copy.textContent = 'Copier';
+        copy.onclick = () => navigator.clipboard && navigator.clipboard.writeText(m.text || '').then(() => { copy.textContent = 'Copié'; setTimeout(() => { copy.textContent = 'Copier'; }, 1200); });
+        const again = document.createElement('button'); again.type = 'button'; again.textContent = 'Régénérer';
+        again.onclick = () => { const i = history.indexOf(m); if (i > 0) { const q = history[i - 1].text; history.splice(i - 1, 2); renderAll(); send(q); } };
+        if (m.text) t.append(copy);
+        t.append(again);
+        if (m.error) {
+          const site = document.createElement('button'); site.type = 'button'; site.className = 'site'; site.textContent = 'Ouvrir le site de l’IA';
+          site.onclick = () => C.invoke('set_ai_native', { on: false });
+          t.append(site);
+        }
+        d.appendChild(t);
+      }
+      function renderAll() {
+        msgs.replaceChildren();
+        welcome.hidden = history.length > 0;
+        for (const m of history) {
+          if (m.role === 'user') addUser(m.text);
+          else { const d = addAnswer(m); if (!m.pending) tools(d, m); }
+        }
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+      let pending = null, preq = '';
+      function send(text) {
+        text = String(text || '').trim();
+        if (!text || pending) return;
+        history.push({ role: 'user', text });
+        const m = { role: 'ai', text: '', pending: true };
+        history.push(m);
+        pending = m;
+        renderAll();
+        // contexte : les derniers échanges de la discussion
+        const prev = history.slice(0, -2).filter((x) => x.text).slice(-6)
+          .map((x) => (x.role === 'user' ? 'Utilisateur : ' : 'Assistant : ') + x.text.slice(0, 1500)).join('\n\n');
+        const prompt = (prev ? 'Suite d’une discussion. Échanges précédents :\n\n' + prev + '\n\nNouveau message de l’utilisateur :\n' : '') + text +
+          (prev ? '\n\nRéponds en français à ce nouveau message, en tenant compte des échanges précédents.' : '');
+        preq = 'ab' + Date.now().toString(36);
+        document.getElementById('csend').disabled = true;
+        C.invoke('shop_ask_ai', { prompt: prompt.slice(0, 11500), req: preq, slot: 4 }).catch(() => window.__corrtexShopAI(preq, '', true, true));
+      }
+      window.__corrtexShopAI = (req, text, done, error) => {
+        if (req !== preq || !pending) return;
+        const m = pending;
+        if (text) m.text = text;
+        const last = msgs.lastElementChild;
+        if (done || error) {
+          m.pending = false;
+          if (!m.text) m.error = 'Pas de réponse de l’IA. Vous n’êtes peut-être pas connecté : ouvrez le site de l’IA pour vous connecter, puis revenez à l’interface Corrtex.';
+          pending = null; preq = '';
+          document.getElementById('csend').disabled = !cin.value.trim();
+          saveHist();
+          renderAll();
+          C.invoke('shop_ai_warm', { slots: [4] });
+          return;
+        }
+        if (last && last.classList.contains('m-a')) last.innerHTML = md(m.text);
+        const nearEnd = chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 120;
+        if (nearEnd) chatBox.scrollTop = chatBox.scrollHeight;
+      };
+      document.getElementById('composer').addEventListener('submit', (e) => { e.preventDefault(); const v = cin.value; cin.value = ''; autosize(); send(v); });
+      cin.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('composer').requestSubmit(); } });
+      const autosize = () => { cin.style.height = 'auto'; cin.style.height = Math.min(160, cin.scrollHeight) + 'px'; document.getElementById('csend').disabled = !cin.value.trim() || !!pending; };
+      cin.addEventListener('input', autosize);
+      document.getElementById('cnew').onclick = () => { if (pending) return; history = []; saveHist(); renderAll(); cin.focus(); };
+      msgs.addEventListener('click', (e) => { const a = e.target.closest('a[href]'); if (a && /^https?:/.test(a.href)) { e.preventDefault(); C.invoke('new_tab', { url: a.href }); } });
+      const WEX = ['Résume la page ouverte', 'Explique-moi ce concept simplement : ', 'Rédige un e-mail pour ', 'Donne-moi des idées de '];
+      for (const t of WEX) {
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = t.replace(/ : $| $/, '…');
+        b.onclick = () => { if (/^Résume la page/.test(t)) { C.invoke('ai_summarize'); return; } cin.value = t; autosize(); cin.focus(); };
+        document.getElementById('wl-ex').appendChild(b);
+      }
+      // demandes venues des outils (résumer, comparer, « continuer dans le panneau »…)
+      const takePending = () => C.invoke('ai_native_take').then((p) => { if (p) send(p); });
+      C.listen('native-ask', takePending);
+      function setNative(on) {
+        document.body.classList.toggle('native', on);
+        document.getElementById('view-t').textContent = on ? 'Afficher le site de l’IA' : 'Interface Corrtex';
+        document.getElementById('view-s').textContent = on ? 'Pour vous connecter ou retrouver vos discussions' : 'Discussion dans le style de Corrtex, l’IA répond en coulisse';
+        if (on) { renderAll(); takePending(); C.invoke('shop_ai_warm', { slots: [4] }); }
+        else fit();
+      }
+      document.getElementById('view-btn').addEventListener('click', () => C.invoke('set_ai_native', { on: !document.body.classList.contains('native') }));
+      C.listen('ai-view', (p) => setNative(!!(p && p.native)));
+      C.invoke('app_info').then((i) => setNative(!i || i.ai_native !== false));
+      function agentHistory() {
+        C.invoke('agent_history_list').then((list) => {
+          const box = document.getElementById('agent-hist');
+          box.replaceChildren();
+          (list || []).slice(0, 8).forEach((r) => {
+            const b = document.createElement('button');
+            b.innerHTML = '<b>' + esc(r.goal || '') + '</b><small>' + esc(String(r.answer || '').split('\n')[0] || (r.kind === 'shopping' ? 'Recherche d’achat' : 'Agent')) + '</small>';
+            b.onclick = () => C.invoke('agent_history_open', { id: r.id });
+            box.appendChild(b);
+          });
+          document.getElementById('agent-hist-h').hidden = !box.children.length;
+        }).catch(() => {});
+      }
+
       document.getElementById('skin').addEventListener('click', () => C.invoke('toggle_ai_skin'));
       document.getElementById('reload').addEventListener('click', () => C.invoke('set_ai_provider', { id: current }));
       document.getElementById('close').addEventListener('click', () => C.invoke('toggle_sidebar'));

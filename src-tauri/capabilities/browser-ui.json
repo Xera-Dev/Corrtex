@@ -13,7 +13,7 @@
     "suggest-*",
     "aires-*",
     "popup-*",
-    "preview-*", "shopw-*"
+    "preview-*", "shopw-*", "reader-*"
   ],
   "local": true,
   "permissions": [
@@ -50,6 +50,10 @@
     "allow-ai-image",
     "allow-agent-kind",
     "allow-shop-ai-warm",
+    "allow-ai-native-take",
+    "allow-reader-open",
+    "allow-reader-get",
+    "allow-set-ai-native",
     "allow-google-switch",
     "allow-shop-sites-set",
     "allow-shop-sites-reset",

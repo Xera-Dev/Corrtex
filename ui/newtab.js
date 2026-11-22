@@ -79,7 +79,7 @@
     sbox.classList.toggle('ai', on);
     $('q').placeholder = on ? 'Demandez n’importe quoi à l’IA…' : 'Rechercher avec Corrtex ou saisir une URL';
     $('aibtn').title = on ? 'Revenir à la recherche classique' : 'Recherche IA : l’IA répond directement ici';
-    if (on) { hideSugg(); C.invoke('search_warm'); }
+    if (on) { hideSugg(); C.invoke('search_warm'); C.invoke('shop_ai_warm', { slots: [3, 2] }); }
     C.save('homeAI', on);
     $('q').focus();
   }
@@ -105,7 +105,7 @@
   async function sources(q) {
     const get = (src) => Promise.race([
       window.__TAURI__.core.invoke('search_fetch', { source: src, q, page: 1, form: null }).then((t) => parseWeb(src, t)),
-      new Promise((res) => setTimeout(() => res([]), 3500)),
+      new Promise((res) => setTimeout(() => res([]), 2500)),
     ]).catch(() => []);
     const [a, b] = await Promise.all([get('ddg'), get('mojeek')]);
     const seen = new Set(), out = [];
@@ -119,15 +119,19 @@
 
   // ------------------------------------------------ article de journal (mode IA, questions)
   // image de référence : la fiche Wikipédia si elle correspond, sinon la première image de DuckDuckGo
+  const wikiOf = {};
   async function imageFor(q) {
     const inv = (source) => Promise.race([window.__TAURI__.core.invoke('search_fetch', { source, q, page: 1, form: null }), new Promise((r, j) => setTimeout(() => j('lent'), 4500))]);
     const words = (x) => String(x).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
     try {
       const p = ((JSON.parse(await inv('wiki')).query || {}).pages || [])[0];
-      if (p && p.thumbnail && /^https:/.test(p.thumbnail.source)) {
+      if (p) {
         const tq = words(q), tt = words(p.title);
         const common = tt.filter((w) => w && tq.indexOf(w) >= 0).length;
-        if (tt.length && common / tt.length >= 0.5) return { src: p.thumbnail.source.replace(/\/(\d+)px-/, '/960px-'), small: p.thumbnail.source, credit: 'Wikipédia · ' + p.title, url: p.fullurl };
+        if (tt.length && common / tt.length >= 0.5) {
+          wikiOf[q] = { title: p.title, extract: p.extract || '', url: p.fullurl, desc: p.description || '' };
+          if (p.thumbnail && /^https:/.test(p.thumbnail.source)) return { src: p.thumbnail.source.replace(/\/(\d+)px-/, '/960px-'), small: p.thumbnail.source, credit: 'Wikipédia · ' + p.title, url: p.fullurl };
+        }
       }
     } catch (e) {}
     try {
@@ -193,7 +197,7 @@
     const aEl = document.createElement('div'); aEl.className = 'ai-a';
     thread.replaceChildren(aEl);
     $('ai-query').textContent = q;
-    conv = []; cur = null; aiReq = '';
+    conv = []; cur = null; aiReq = ''; aiRace = null;
     thread.scrollTop = 0;
     if (kind === 'shopping') {
       setMode('Recherche d’achat');
@@ -236,8 +240,12 @@
     turn.imgP = imageFor(subject);
     turn.src = await sources(subject);
     if (cur !== turn) return;
+    // réponse immédiate (Wikipédia et premiers résultats) pendant que l'IA rédige l'article
+    await Promise.race([turn.imgP, new Promise((r) => setTimeout(r, 600))]);
+    turn.wiki = wikiOf[subject] || null;
+    if (!turn.a) renderInstant(turn, false);
     $('ai-state').textContent = 'l’IA rédige…';
-    turn.imgP.then((im) => { if (!im || cur !== turn) return; turn.img = im; if (turn.a) renderArticle(turn, turn.a, !aiReq); else turn.el.insertAdjacentHTML('afterbegin', ''); });
+    turn.imgP.then((im) => { if (!im || cur !== turn) return; turn.img = im; if (turn.a) renderArticle(turn, turn.a, !aiReq); else if (turn.instant) renderInstant(turn, false); });
     const srcTxt = turn.src.map((r, i) => '[' + (i + 1) + '] ' + r.title + ' — ' + r.url + '\n' + r.snippet).join('\n\n');
     const hist = conv.slice(0, -1).map((t) => 'Question : ' + t.q + '\nRéponse : ' + t.a.slice(0, 1200)).join('\n\n');
     const prompt = (hist ? 'Conversation précédente :\n' + hist + '\n\n' : '') +
@@ -250,18 +258,44 @@
       '## À retenir\n- 3 points clés courts\n' +
       'Deux ou trois intertitres au total avant « À retenir ». ' +
       (srcTxt ? 'Cite les sources utilisées avec leur numéro entre crochets, par exemple [2]. ' : '') + 'Pas d’introduction ni de formule de politesse, pas d’autre texte autour de l’article.';
-    aiReq = 'na' + Date.now().toString(36);
-    window.__TAURI__.core.invoke('shop_ask_ai', { prompt, req: aiReq }).catch((e) => window.__corrtexShopAI(aiReq, '', true, true));
+    // deux sessions d'IA cachées (préparées à l'avance) : la première qui répond l'emporte
+    const base = 'na' + Date.now().toString(36);
+    aiReq = base;
+    aiRace = { reqs: [base + 'a', base + 'b'], winner: '', failed: 0 };
+    aiRace.reqs.forEach((rq, i) => window.__TAURI__.core.invoke('shop_ask_ai', { prompt, req: rq, slot: i ? 2 : 3 })
+      .catch(() => window.__corrtexShopAI(rq, '', true, true)));
+  }
+  let aiRace = null;
+  function renderInstant(t, failed) {
+    t.instant = true;
+    const w = t.wiki, top = t.src.slice(0, 3);
+    const lede = w && w.extract ? w.extract.split(/(?<=\.)\s+/).slice(0, 2).join(' ') : (top[0] ? top[0].snippet : '');
+    let md = '# ' + (w ? w.title + (w.desc ? ' — ' + w.desc : '') : t.q) + '\n> ' + lede + '\n';
+    if (top.length) md += '## En bref\n' + top.map((r, i) => '- ' + (r.snippet || r.title) + ' [' + (i + 1) + ']').join('\n') + '\n';
+    renderArticle(t, md, failed);
+    t.el.querySelector('.news').insertAdjacentHTML('beforeend', '<p class="note">' + (failed ? 'L’IA n’a pas répondu : voici l’essentiel des sources.' : 'L’IA rédige un article plus complet…') + '</p>');
   }
   window.__corrtexShopAI = (req, text, done, error) => {
-    if (req !== aiReq || !cur) return;
+    if (!cur || !aiRace || aiRace.reqs.indexOf(req) < 0) return;
+    // course entre les sessions : la première qui écrit garde la main
+    if (!aiRace.winner) {
+      if (text) aiRace.winner = req;
+      else if (done || error) { if (++aiRace.failed < aiRace.reqs.length) return; }
+      else return;
+    } else if (req !== aiRace.winner) return;
     const t = cur;
+    if ((done || error) && !text && t.src.length) { aiReq = ''; aiRace = null; sbox.classList.remove('thinking'); $('ai-state').textContent = ''; renderInstant(t, true); finishTurn(t); return; }
     if (text) { t.a = text; renderArticle(t, text, !!(done || error)); }
     if (done || error) {
-      aiReq = '';
+      aiReq = ''; aiRace = null;
       sbox.classList.remove('thinking');
       $('ai-state').textContent = '';
       if (error && !text) t.el.innerHTML = '<p class="err">Pas de réponse de l’IA. Ouvrez le panneau IA et vérifiez que vous êtes connecté à Claude, ChatGPT ou Gemini.</p>';
+      finishTurn(t);
+    }
+  };
+  function finishTurn(t) {
+    {
       if (t.src.length) {
         const s = document.createElement('div'); s.className = 'ai-src';
         s.innerHTML = t.src.slice(0, 6).map((r, i) => '<a href="' + esc(r.url) + '" title="' + esc(r.title) + '"><b>' + (i + 1) + '</b><img alt="" loading="lazy" src="' + esc(C.favicon(r.url, 32)) + '" onerror="this.remove()"><span>' + esc(C.hostOf(r.url)) + '</span></a>').join('');
@@ -271,19 +305,28 @@
       $('ai-acts').hidden = false;
       setTimeout(() => $('ai-fq').focus(), 50);
     }
-  };
+  }
   function closeAi() {
     if (shopEl) shopAct({ action: 'close' });
     shopEl = null; shopView = null;
     panel.hidden = true;
-    document.body.classList.remove('ai-open');
+    document.body.classList.remove('ai-open', 'ai-wide');
     sbox.classList.remove('thinking');
     thread.replaceChildren();
     $('ai-query').textContent = '';
-    conv = []; cur = null; aiReq = '';
+    conv = []; cur = null; aiReq = ''; aiRace = null;
     $('q').focus();
   }
   $('ai-close').onclick = closeAi;
+  // agrandir le panneau, ou le détacher dans une fenêtre à part (déplaçable sur tout l'écran)
+  $('ai-wide').onclick = () => { const on = document.body.classList.toggle('ai-wide'); $('ai-wide').title = on ? 'Réduire' : 'Agrandir'; };
+  $('ai-pop').onclick = () => {
+    const art = thread.querySelector('.ai-a');
+    if (!art || !art.innerHTML.trim()) return;
+    const h = art.querySelector('h1');
+    const title = (h ? h.textContent : '') || $('ai-query').textContent || 'Recherche IA';
+    C.invoke('reader_open', { title, html: art.innerHTML });
+  };
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden && !document.querySelector('.drawer.open')) closeAi(); });
   $('ai-follow').addEventListener('submit', (e) => {
     e.preventDefault();
