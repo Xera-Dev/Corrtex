@@ -1516,10 +1516,37 @@
     }
 
     // cartes d'articles visibles : un prix, un lien et une image dans un même bloc
+    // cartes d'articles des grandes boutiques (et des sites qui balisent leurs produits)
+    var CARD_SEL = [
+      '[data-component-type="s-search-result"]', '[data-asin]:not([data-asin=""]) .s-card-container', '.s-result-item[data-asin]:not([data-asin=""])',
+      '.s-item', 'li.s-card', '[data-testid="product-card"]', '[data-testid*="productCard" i]', '[data-testid*="product-tile" i]',
+      '.Article-item', '.prdtBloc', '.product-list__item', '[itemtype*="schema.org/Product"]', '[data-product-id]', '[data-sku]', '[data-productid]',
+      'article[class*="product" i]', 'li[class*="product" i]', 'div[class*="product-card" i]', 'div[class*="productCard" i]', 'div[class*="ProductTile" i]'
+    ];
+    function knownCards() {
+      for (var i = 0; i < CARD_SEL.length; i++) {
+        var list;
+        try { list = [].slice.call(document.querySelectorAll(CARD_SEL[i])); } catch (e) { continue; }
+        // de vraies cartes : un lien, un prix, et au moins deux sur la page
+        list = list.filter(function (c) { return c.querySelector('a[href]') && PRICE.test(c.textContent) && c.getBoundingClientRect().height > 40; });
+        // pas de cartes imbriquées les unes dans les autres
+        list = list.filter(function (c) { return !list.some(function (o) { return o !== c && o.contains(c); }); });
+        if (list.length >= 2) return list.slice(0, 60);
+      }
+      return [];
+    }
+    // prix affiché d'une carte : champ de prix dédié s'il existe (Amazon : .a-offscreen), sinon premier prix du texte
+    function cardPrice(c) {
+      var el = c.querySelector('.a-price .a-offscreen, [itemprop="price"], [data-testid*="price" i], [class*="price" i]:not([class*="old" i]):not([class*="strike" i]):not([class*="was" i])');
+      var t = el ? (el.getAttribute('content') || el.textContent) : '';
+      var m = t.match(PRICE) || (el && /\d/.test(t) ? [0, t] : null) || c.textContent.match(PRICE);
+      return m ? num(m[1] || m[2]) : null;
+    }
     function fromDom() {
       var out = [], cards = [], seen = new Set(), priceOf = new Map();
+      knownCards().forEach(function (c) { cards.push(c); seen.add(c); priceOf.set(c, cardPrice(c)); });
       var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), n, count = 0;
-      while ((n = w.nextNode()) && count < 6000 && cards.length < 60) {
+      while (cards.length < 2 && (n = w.nextNode()) && count < 40000 && cards.length < 60) {
         count++;
         var t = n.data;
         if (t.length > 60 || !PRICE.test(t)) continue;
@@ -1528,7 +1555,7 @@
           if (el === document.body) break;
           if (!el.querySelector('a[href]') || !el.querySelector('img')) continue;
           var r = el.getBoundingClientRect();
-          if (r.height < 90 || r.height > 1000 || r.width > innerWidth * 0.75 || r.width < 90) continue;
+          if (r.height < 90 || r.height > 1100 || r.width > innerWidth * 0.98 || r.width < 90) continue;
           if (el.textContent.length > 2500) break;
           card = el;
           break;
