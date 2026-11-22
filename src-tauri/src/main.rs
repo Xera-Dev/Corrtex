@@ -4111,7 +4111,7 @@ fn quick_page_loaded(app: &AppHandle, wv: &Webview) {
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(1200));
         let js = format!(
-            "window.__corrtexAsk && window.__corrtexAsk({}); setTimeout(function () {{ window.__corrtexWatch && window.__corrtexWatch({}); }}, 1500);",
+            "window.__corrtexMark && window.__corrtexMark(); window.__corrtexAsk && window.__corrtexAsk({}); setTimeout(function () {{ window.__corrtexWatch && window.__corrtexWatch({}); }}, 1500);",
             serde_json::to_string(&q.prompt).unwrap_or_default(),
             q.req
         );

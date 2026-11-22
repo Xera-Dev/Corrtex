@@ -189,15 +189,24 @@
 
   // Réponse rapide (bulle dans la page) : on suit le texte de la dernière réponse et on le
   // renvoie à Corrtex au fur et à mesure, jusqu'à ce qu'il ne bouge plus.
+  // réponse déjà affichée avant la question (discussion précédente restée à l'écran) : à ignorer
+  var mark = { n: 0, last: '' };
+  window.__corrtexMark = function () {
+    if (!site || !site.reply) return;
+    var ns = document.querySelectorAll(site.reply);
+    mark = { n: ns.length, last: ns.length ? (ns[ns.length - 1].innerText || '').trim() : '' };
+  };
   window.__corrtexWatch = function (req) {
     if (!site || !site.reply) return;
-    var last = '', stable = 0, start = Date.now(), sentAt = 0;
+    var last = '', stable = 0, start = Date.now(), sentAt = 0, base = mark;
     function report(text, done, error) {
       try { window.__TAURI_INTERNALS__.invoke('ai_quick_result', { req: req, text: (text || '').slice(0, 8000), done: !!done, error: !!error }); } catch (e) {}
     }
     var t = setInterval(function () {
       var ns = document.querySelectorAll(site.reply);
       var txt = ns.length ? (ns[ns.length - 1].innerText || '').trim() : '';
+      // tant que seule l'ancienne réponse est visible, on attend la nouvelle
+      if (txt && ns.length <= base.n && txt === base.last) txt = '';
       var busy = !!document.querySelector('button[aria-label*="Stop" i], button[aria-label*="Arrêter" i], button[aria-label*="Interrompre" i], button[data-testid="stop-button"]');
       if (txt && txt !== last) {
         last = txt; stable = Date.now();

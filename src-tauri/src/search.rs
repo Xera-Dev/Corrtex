@@ -170,7 +170,7 @@ async fn fetch_source(source: &str, q: &str, page: u32, form: &str) -> Result<St
         "wiki" => {
             text_of(
                 c.get(format!(
-                    "https://fr.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1&generator=search&gsrlimit=1&gsrsearch={}&prop=extracts%7Cpageimages%7Cinfo%7Cdescription&exintro=1&explaintext=1&exsentences=4&piprop=thumbnail&pithumbsize=480&inprop=url",
+                    "https://fr.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1&generator=search&gsrlimit=1&gsrsearch={}&prop=extracts%7Cpageimages%7Cinfo%7Cdescription%7Cpageprops&ppprop=wikibase_item&exintro=1&explaintext=1&exsentences=4&piprop=thumbnail&pithumbsize=480&inprop=url",
                     enc(q)
                 ))
                 .header("User-Agent", WIKI_UA),
@@ -178,6 +178,8 @@ async fn fetch_source(source: &str, q: &str, page: u32, form: &str) -> Result<St
             )
             .await
         }
+        // fiche d'une personne (Wikidata) : q est l'identifiant Wikidata (Q517…)
+        "person" => person_card(q).await,
         "images" | "news" | "videos" => {
             let vqd = ddg_vqd(q).await?;
             let (path, per) = match source {
@@ -271,4 +273,66 @@ pub async fn shop_get(url: String) -> Result<String, String> {
         r.text().await.map_err(|_| "réponse coupée".to_string())
     })
     .await
+}
+
+/// Fiche d'une personne à partir de Wikidata : naissance, décès, lieux, métiers, nationalité,
+/// fonctions et portrait. Renvoie {"human": false} si l'élément n'est pas une personne.
+async fn person_card(qid: &str) -> Result<String, String> {
+    if !(qid.starts_with('Q') && qid.len() < 14 && qid[1..].chars().all(|c| c.is_ascii_digit())) {
+        return Err("identifiant invalide".into());
+    }
+    async fn get(url: String) -> Result<serde_json::Value, String> {
+        let t = text_of(client().get(url).header("User-Agent", WIKI_UA).header(ACCEPT, "application/json"), "Wikidata").await?;
+        serde_json::from_str::<serde_json::Value>(&t).map_err(|_| "Wikidata : réponse illisible".to_string())
+    }
+    let j = get(format!("https://www.wikidata.org/w/api.php?action=wbgetentities&ids={qid}&props=claims%7Clabels%7Cdescriptions&languages=fr%7Cen&format=json")).await?;
+    let e = &j["entities"][qid];
+    let claims = &e["claims"];
+    let items = |p: &str, n: usize| -> Vec<String> {
+        claims[p]
+            .as_array()
+            .map(|l| l.iter().filter_map(|c| c["mainsnak"]["datavalue"]["value"]["id"].as_str().map(|s| s.to_string())).take(n).collect())
+            .unwrap_or_default()
+    };
+    if !items("P31", 20).iter().any(|x| x == "Q5") {
+        return Ok(r#"{"human":false}"#.into());
+    }
+    let time = |p: &str| -> serde_json::Value {
+        let v = &claims[p][0]["mainsnak"]["datavalue"]["value"];
+        if v["time"].is_string() { serde_json::json!({ "t": v["time"], "p": v["precision"] }) } else { serde_json::Value::Null }
+    };
+    let (born_in, died_in, jobs, nat, roles) = (items("P19", 1), items("P20", 1), items("P106", 4), items("P27", 1), items("P39", 2));
+    let mut ids: Vec<String> = born_in.iter().chain(&died_in).chain(&jobs).chain(&nat).chain(&roles).cloned().collect();
+    ids.sort();
+    ids.dedup();
+    let mut names: HashMap<String, String> = HashMap::new();
+    if !ids.is_empty() {
+        if let Ok(l) = get(format!("https://www.wikidata.org/w/api.php?action=wbgetentities&ids={}&props=labels&languages=fr%7Cen&format=json", ids.join("%7C"))).await {
+            for id in &ids {
+                let lab = &l["entities"][id.as_str()]["labels"];
+                if let Some(s) = lab["fr"]["value"].as_str().or_else(|| lab["en"]["value"].as_str()) {
+                    names.insert(id.clone(), s.to_string());
+                }
+            }
+        }
+    }
+    let label = |v: &Vec<String>| -> Vec<String> { v.iter().filter_map(|i| names.get(i).cloned()).collect() };
+    let image = claims["P18"][0]["mainsnak"]["datavalue"]["value"]
+        .as_str()
+        .map(|f| format!("https://commons.wikimedia.org/wiki/Special:FilePath/{}?width=420", enc(&f.replace(' ', "_")).replace('+', "%20")));
+    let lab = |k: &str| e[k]["fr"]["value"].as_str().or_else(|| e[k]["en"]["value"].as_str()).unwrap_or("").to_string();
+    Ok(serde_json::json!({
+        "human": true,
+        "name": lab("labels"),
+        "desc": lab("descriptions"),
+        "birth": time("P569"),
+        "death": time("P570"),
+        "birthPlace": label(&born_in).first(),
+        "deathPlace": label(&died_in).first(),
+        "jobs": label(&jobs),
+        "nationality": label(&nat).first(),
+        "roles": label(&roles),
+        "image": image,
+    })
+    .to_string())
 }

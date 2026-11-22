@@ -33,6 +33,7 @@
   $('q').addEventListener('input', () => {
     const typed = $('q').value.trim();
     clearTimeout(sgTimer);
+    if (aiOn && /^\/\w*$/.test(typed)) { cmdSugg(typed); return; }
     if (!typed || aiOn) { hideSugg(); return; }
     const seq = ++sgSeq;
     sgTimer = setTimeout(async () => {
@@ -58,13 +59,31 @@
     e.preventDefault();
     // mode IA : une adresse s'ouvre quand même, le reste est posé à l'IA
     const typed = $('q').value.trim();
-    if (aiOn && typed && !/(^|\s)![a-z]/i.test(typed) && C.toUrl(typed) === C.searchUrl(typed)) { route(typed); $('q').value = ''; return; }
+    if (aiOn && typed && !/(^|\s)![a-z]/i.test(typed) && (/^\//.test(typed) || C.toUrl(typed) === C.searchUrl(typed))) { route(typed, false, true); $('q').value = ''; hideSugg(); return; }
     const url = C.toUrl($('q').value);
     if (url) { C.prefetchSearch(url); location.href = url; }
   });
   setTimeout(() => $('q').focus(), 50);
   // connexions vers les moteurs ouvertes à l'avance : la première recherche part plus vite
   if (C.engine() === 'corrtex') C.invoke('search_warm');
+
+
+  // commandes du mode IA, proposées dès qu'on tape « / »
+  const CMDS = [['/shopping', 'Recherche de produits : comparaison des meilleurs articles et suivi des prix'], ['/agent', 'L’agent agit sur le web pour vous (réservation, formulaire…)']];
+  function cmdSugg(typed) {
+    const box = $('sugg');
+    const list = CMDS.filter((c) => c[0].startsWith(typed.toLowerCase()));
+    if (!list.length) { hideSugg(); return; }
+    box.replaceChildren();
+    for (const c of list) {
+      const el = document.createElement('div');
+      el.className = 'sg';
+      el.innerHTML = '<b style="font-weight:650">' + c[0] + '</b>&nbsp;&nbsp;<span style="opacity:.7">' + esc(c[1]) + '</span>';
+      el.addEventListener('mousedown', (e) => { e.preventDefault(); $('q').value = c[0] + ' '; $('q').focus(); hideSugg(); });
+      box.appendChild(el);
+    }
+    box.hidden = false;
+  }
 
   // ------------------------------------------------------------- recherche IA
   // Le bouton IA (à la place du micro) passe la barre en mode IA : contour arc-en-ciel,
@@ -77,7 +96,7 @@
   function setAi(on) {
     aiOn = on;
     sbox.classList.toggle('ai', on);
-    $('q').placeholder = on ? 'Demandez n’importe quoi à l’IA…' : 'Rechercher avec Corrtex ou saisir une URL';
+    $('q').placeholder = on ? 'Posez une question… (/shopping pour un achat, /agent pour agir)' : 'Rechercher avec Corrtex ou saisir une URL';
     $('aibtn').title = on ? 'Revenir à la recherche classique' : 'Recherche IA : l’IA répond directement ici';
     if (on) { hideSugg(); C.invoke('search_warm'); C.invoke('shop_ai_warm', { slots: [3, 2] }); }
     C.save('homeAI', on);
@@ -117,6 +136,55 @@
     return out.slice(0, 8);
   }
 
+
+  // ------------------------------------------------ fiche d'une personne (Wikidata)
+  async function personFor(subject, imgP) {
+    try { await imgP; } catch (e) {}
+    const w = wikiOf[subject];
+    if (!w || !w.qid) return null;
+    try {
+      const t = await Promise.race([window.__TAURI__.core.invoke('search_fetch', { source: 'person', q: w.qid, page: 1, form: null }), new Promise((r, j) => setTimeout(() => j('lent'), 5000))]);
+      const p = JSON.parse(t);
+      if (!p || !p.human) return null;
+      p.wiki = w;
+      return p;
+    } catch (e) { return null; }
+  }
+  const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+  function wdDate(d) {
+    if (!d || !d.t) return '';
+    const m = String(d.t).match(/^([+-])0*(\d+)-(\d\d)-(\d\d)/);
+    if (!m) return '';
+    const y = +m[2], bc = m[1] === '-', pr = +d.p || 9;
+    const yy = y + (bc ? ' av. J.-C.' : '');
+    if (pr >= 11 && +m[4]) return (+m[4] === 1 ? '1er' : +m[4]) + ' ' + MOIS[+m[3] - 1] + ' ' + yy;
+    if (pr >= 10 && +m[3]) return MOIS[+m[3] - 1] + ' ' + yy;
+    if (pr === 8) return 'années ' + Math.floor(y / 10) * 10;
+    if (pr <= 7) return Math.ceil(y / 100) + 'e siècle' + (bc ? ' av. J.-C.' : '');
+    return String(yy);
+  }
+  function wdYear(d) { const m = d && String(d.t).match(/^([+-])0*(\d+)-(\d\d)-(\d\d)/); return m ? { y: (m[1] === '-' ? -1 : 1) * +m[2], mo: +m[3] || 1, d: +m[4] || 1 } : null; }
+  function age(b, e) {
+    const x = wdYear(b), z = e ? wdYear(e) : (() => { const n = new Date(); return { y: n.getFullYear(), mo: n.getMonth() + 1, d: n.getDate() }; })();
+    if (!x || !z) return null;
+    let a = z.y - x.y - ((z.mo < x.mo || (z.mo === x.mo && z.d < x.d)) ? 1 : 0);
+    if (x.y < 0 && z.y > 0) a -= 1; // pas d'année zéro
+    return a >= 0 && a < 130 ? a : null;
+  }
+  function personCard(p) {
+    const rows = [];
+    const a = age(p.birth, p.death);
+    if (p.birth) rows.push(['Naissance', wdDate(p.birth) + (p.birthPlace ? ', ' + p.birthPlace : '') + (!p.death && a != null ? ' (' + a + ' ans)' : '')]);
+    if (p.death) rows.push(['Décès', wdDate(p.death) + (p.deathPlace ? ', ' + p.deathPlace : '') + (a != null ? ' (à ' + a + ' ans)' : '')]);
+    if (p.nationality) rows.push(['Nationalité', p.nationality]);
+    if (p.jobs && p.jobs.length) rows.push(['Activité' + (p.jobs.length > 1 ? 's' : ''), p.jobs.join(', ')]);
+    if (p.roles && p.roles.length) rows.push(['Fonction' + (p.roles.length > 1 ? 's' : ''), p.roles.join(', ')]);
+    return '<aside class="pcard">' + (p.image ? '<img alt="" src="' + esc(p.image) + '" onerror="this.remove()">' : '') +
+      '<div class="pn">' + esc(p.name || (p.wiki && p.wiki.title) || '') + '</div>' + (p.desc ? '<div class="pd">' + esc(p.desc) + '</div>' : '') +
+      '<dl>' + rows.map((r) => '<dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd>').join('') + '</dl>' +
+      (p.wiki && p.wiki.url ? '<a class="pw" href="' + esc(p.wiki.url) + '">Wikipédia ›</a>' : '') + '</aside>';
+  }
+
   // ------------------------------------------------ article de journal (mode IA, questions)
   // image de référence : la fiche Wikipédia si elle correspond, sinon la première image de DuckDuckGo
   const wikiOf = {};
@@ -129,7 +197,7 @@
         const tq = words(q), tt = words(p.title);
         const common = tt.filter((w) => w && tq.indexOf(w) >= 0).length;
         if (tt.length && common / tt.length >= 0.5) {
-          wikiOf[q] = { title: p.title, extract: p.extract || '', url: p.fullurl, desc: p.description || '' };
+          wikiOf[q] = { title: p.title, extract: p.extract || '', url: p.fullurl, desc: p.description || '', qid: (p.pageprops || {}).wikibase_item || '' };
           if (p.thumbnail && /^https:/.test(p.thumbnail.source)) return { src: p.thumbnail.source.replace(/\/(\d+)px-/, '/960px-'), small: p.thumbnail.source, credit: 'Wikipédia · ' + p.title, url: p.fullurl };
         }
       }
@@ -160,7 +228,15 @@
     if (ul) body += '</ul>';
     const words = String(text).split(/\s+/).length;
     const date = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-    const img = t.img;
+    const img = t.person ? null : t.img;
+    const head = '<div class="kicker">Corrtex IA · ' + esc(date) + ' · ' + Math.max(1, Math.round(words / 200)) + ' min de lecture</div>' +
+      (title ? '<h1>' + title + '</h1>' : '') + (lede ? '<p class="lede">' + lede + '</p>' : '');
+    if (t.person) {
+      // personne : titre et chapeau à gauche, portrait et fiche à droite, biographie en dessous
+      t.el.innerHTML = '<article class="news person"><div class="ptop"><div class="phead">' + head + '</div>' + personCard(t.person) + '</div>' +
+        '<div class="body">' + body + (done ? '' : '<span class="caret"></span>') + '</div></article>';
+      return;
+    }
     t.el.innerHTML = '<article class="news">' +
       (img ? '<figure><img alt="" src="' + esc(img.src) + '" onerror="if(this.dataset.f){this.closest(\'figure\').remove()}else{this.dataset.f=1;this.src=\'' + esc(img.small || '') + '\'}"><figcaption>' + esc(img.credit || '') + '</figcaption></figure>' : '') +
       '<div class="kicker">Corrtex IA · ' + esc(date) + ' · ' + Math.max(1, Math.round(words / 200)) + ' min de lecture</div>' +
@@ -184,11 +260,14 @@
 
   // la demande passe par l'agent : achat → recherche d'achat (suivi des prix) dans ce panneau ;
   // action sur le web → l'agent prend la main dans l'onglet ; question → réponse avec sources
-  async function route(q, forceAgent) {
+  // commandes : /shopping (recherche de produits) et /agent (l'agent agit sur le web) ; sinon, une question
+  async function route(q, forceAgent, fresh) {
     q = clean(q);
     if (!q) return;
-    const kind = forceAgent ? 'action' : await C.invoke('agent_kind', { goal: q }) || 'answer';
-    if (kind === 'answer') return ask(q);
+    let kind = forceAgent ? 'action' : 'answer';
+    const cmd = q.match(/^\/(shopping|achat|produit|agent)\b\s*/i);
+    if (cmd) { kind = /agent/i.test(cmd[1]) ? 'action' : 'shopping'; q = q.slice(cmd[0].length).trim(); if (!q) { $('q').value = cmd[0].trim() + ' '; $('q').focus(); return; } }
+    if (kind === 'answer') { if (fresh) conv = []; return ask(q); }
     hideSugg();
     document.body.classList.add('ai-open');
     panel.hidden = false;
@@ -236,7 +315,7 @@
     thread.scrollTop = 0;
     $('ai-state').textContent = 'recherche des sources…';
     // l'image de référence est cherchée en même temps que les sources
-    const subject = conv.length > 1 ? conv[0].q + ' ' + q : q;
+    const subject = q;
     turn.imgP = imageFor(subject);
     turn.src = await sources(subject);
     if (cur !== turn) return;
@@ -244,11 +323,17 @@
     await Promise.race([turn.imgP, new Promise((r) => setTimeout(r, 600))]);
     turn.wiki = wikiOf[subject] || null;
     if (!turn.a) renderInstant(turn, false);
+    // une personne : portrait et fiche (naissance, décès, métier…) à droite de l'article
+    personFor(subject, turn.imgP).then((pc) => {
+      if (!pc || cur !== turn) return;
+      turn.person = pc;
+      if (turn.a) renderArticle(turn, turn.a, !aiRace); else if (turn.instant) renderInstant(turn, false);
+    });
     $('ai-state').textContent = 'l’IA rédige…';
     turn.imgP.then((im) => { if (!im || cur !== turn) return; turn.img = im; if (turn.a) renderArticle(turn, turn.a, !aiReq); else if (turn.instant) renderInstant(turn, false); });
     const srcTxt = turn.src.map((r, i) => '[' + (i + 1) + '] ' + r.title + ' — ' + r.url + '\n' + r.snippet).join('\n\n');
     const hist = conv.slice(0, -1).map((t) => 'Question : ' + t.q + '\nRéponse : ' + t.a.slice(0, 1200)).join('\n\n');
-    const prompt = (hist ? 'Conversation précédente :\n' + hist + '\n\n' : '') +
+    const prompt = (hist ? 'Conversation précédente (la nouvelle question peut être sans rapport) :\n' + hist + '\n\n' : '') +
       'Question : « ' + q + ' »\n\n' + (srcTxt ? 'Résultats de recherche web actuels :\n\n' + srcTxt + '\n\n' : '') +
       'Rédige en français un court article de presse qui répond à la question, à partir de ces résultats et de tes connaissances, avec exactement cette structure :\n' +
       '# Titre accrocheur et informatif\n' +
@@ -256,7 +341,7 @@
       '## Intertitre\nParagraphe de 2 à 4 phrases.\n' +
       '## Intertitre\nParagraphe de 2 à 4 phrases.\n' +
       '## À retenir\n- 3 points clés courts\n' +
-      'Deux ou trois intertitres au total avant « À retenir ». ' +
+      'Deux ou trois intertitres au total avant « À retenir ». Si la question porte sur une personne, rédige une biographie détaillée (origines, parcours, réalisations, héritage) avec trois ou quatre intertitres. ' +
       (srcTxt ? 'Cite les sources utilisées avec leur numéro entre crochets, par exemple [2]. ' : '') + 'Pas d’introduction ni de formule de politesse, pas d’autre texte autour de l’article.';
     // deux sessions d'IA cachées (préparées à l'avance) : la première qui répond l'emporte
     const base = 'na' + Date.now().toString(36);

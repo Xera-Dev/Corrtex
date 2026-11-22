@@ -604,3 +604,18 @@ body.ai-wide .news figure img { max-height: 340px; }
 body.ai-wide .news h1 { font-size: 33px; }
 body.ai-wide .news .body { font-size: 16.5px; column-gap: 34px; }
 body.ai-wide #ai-wide svg path { d: path("M4 10h6V4M20 14h-6v6M10 10L3 3M14 14l7 7"); }
+
+/* article sur une personne : portrait et fiche à droite */
+.news.person .ptop { display: grid; grid-template-columns: minmax(0, 1fr) 236px; gap: 20px; align-items: start; }
+.pcard { border-radius: 18px; padding: 12px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.18); font-family: "Segoe UI", system-ui, sans-serif; }
+.pcard img { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; object-position: center 20%; border-radius: 12px; background: rgba(255,255,255,.06); animation: aiIn .4s ease; }
+.pcard .pn { margin-top: 10px; font: 700 16px/1.25 Georgia, "Times New Roman", serif; }
+.pcard .pd { margin-top: 2px; font-size: 12px; color: var(--fg-dim); line-height: 1.35; }
+.pcard dl { margin: 8px 0 0; display: grid; gap: 5px; }
+.pcard dt { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--l1, #ff4f7b); }
+.pcard dd { margin: 1px 0 0; font-size: 12.5px; line-height: 1.4; }
+.pcard .pw { display: inline-block; margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--fg); text-decoration: none; opacity: .8; }
+.pcard .pw:hover { opacity: 1; }
+.news.person .body { margin-top: 16px; }
+body.ai-wide .news.person .ptop { grid-template-columns: minmax(0, 1fr) 280px; }
+@media (max-width: 760px) { .news.person .ptop { grid-template-columns: 1fr; } }
