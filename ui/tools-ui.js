@@ -3,6 +3,7 @@
 (function () {
   const C = window.Corrtex;
   const ICON = {
+    plane: '<svg viewBox="0 0 24 24"><path d="M10.5 21l1.5-6.5-4-2.5-3 1-1-1 3.5-3L6 4.5l1.5-1 5 4 4.5-4a2 2 0 0 1 3 3l-4.5 4.5 4 5-1 1.5-4.5-1.5-3 3.5z"/></svg>',
     history: '<svg viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3.5 4v4.5H8"/><path d="M12 7.5V12l3 2"/></svg>',
     download: '<svg viewBox="0 0 24 24"><path d="M12 4.5v10.5M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg>',
     search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>',
@@ -58,6 +59,10 @@
       C.invoke('toggle_ext_panel', { view: 'shopping' });
     };
     l1.append(shopRow);
+    // agent voyage : vols, trains, bateaux, hôtels, Airbnb selon le budget
+    const tripRow = row(ICON.plane, 'Agent voyage', '');
+    tripRow.onclick = () => { close(); C.invoke('new_tab', { url: C.pageUrl('voyage.html') }); };
+    l1.append(tripRow);
     g1.append(l1);
 
     // ---------------------------------------------------------------- confidentialité

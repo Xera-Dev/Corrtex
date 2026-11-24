@@ -178,6 +178,28 @@ async fn fetch_source(source: &str, q: &str, page: u32, form: &str) -> Result<St
             )
             .await
         }
+        // agent voyage : coordonnées d'une ville (Open-Meteo, gratuit, sans clé)
+        "geo" => {
+            text_of(c.get(format!("https://geocoding-api.open-meteo.com/v1/search?name={}&count=1&language=fr&format=json", enc(q))), "Open-Meteo").await
+        }
+        // agent voyage : météo prévue (f) ou relevée l'an dernier aux mêmes dates (a) — q = "f|lat|lon|début|fin"
+        "weather" => {
+            let parts: Vec<&str> = q.split('|').collect();
+            let num_ok = |x: &str| !x.is_empty() && x.len() < 12 && x.chars().all(|c| c.is_ascii_digit() || c == '.' || c == '-');
+            let date_ok = |x: &str| x.len() == 10 && x.chars().all(|c| c.is_ascii_digit() || c == '-');
+            if parts.len() != 5 || !matches!(parts[0], "f" | "a") || !num_ok(parts[1]) || !num_ok(parts[2]) || !date_ok(parts[3]) || !date_ok(parts[4]) {
+                return Err("demande météo invalide".into());
+            }
+            let host = if parts[0] == "f" { "api.open-meteo.com/v1/forecast" } else { "archive-api.open-meteo.com/v1/archive" };
+            text_of(
+                c.get(format!(
+                    "https://{host}?latitude={}&longitude={}&start_date={}&end_date={}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto",
+                    parts[1], parts[2], parts[3], parts[4]
+                )),
+                "Open-Meteo",
+            )
+            .await
+        }
         // fiche d'une personne (Wikidata) : q est l'identifiant Wikidata (Q517…)
         "person" => person_card(q).await,
         "images" | "news" | "videos" => {

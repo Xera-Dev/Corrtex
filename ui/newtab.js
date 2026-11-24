@@ -69,7 +69,7 @@
 
 
   // commandes du mode IA, proposées dès qu'on tape « / »
-  const CMDS = [['/shopping', 'Recherche de produits : comparaison des meilleurs articles et suivi des prix'], ['/agent', 'L’agent agit sur le web pour vous (réservation, formulaire…)']];
+  const CMDS = [['/shopping', 'Recherche de produits : comparaison des meilleurs articles et suivi des prix'], ['/voyage', 'Agent voyage : vols, trains, bateaux, hôtels et Airbnb selon votre budget'], ['/agent', 'L’agent agit sur le web pour vous (réservation, formulaire…)']];
   function cmdSugg(typed) {
     const box = $('sugg');
     const list = CMDS.filter((c) => c[0].startsWith(typed.toLowerCase()));
@@ -96,7 +96,7 @@
   function setAi(on) {
     aiOn = on;
     sbox.classList.toggle('ai', on);
-    $('q').placeholder = on ? 'Posez une question… (/shopping pour un achat, /agent pour agir)' : 'Rechercher avec Corrtex ou saisir une URL';
+    $('q').placeholder = on ? 'Posez une question… (/shopping, /voyage, /agent)' : 'Rechercher avec Corrtex ou saisir une URL';
     $('aibtn').title = on ? 'Revenir à la recherche classique' : 'Recherche IA : l’IA répond directement ici';
     if (on) { hideSugg(); C.invoke('search_warm'); C.invoke('shop_ai_warm', { slots: [3, 2] }); }
     C.save('homeAI', on);
@@ -265,6 +265,9 @@
     q = clean(q);
     if (!q) return;
     let kind = forceAgent ? 'action' : 'answer';
+    // /voyage : l'agent voyage s'ouvre avec la demande
+    const trip = q.match(/^\/(voyage|voyages|trip)\b\s*/i);
+    if (trip) { location.href = C.pageUrl('voyage.html') + (q.slice(trip[0].length).trim() ? '#q=' + encodeURIComponent(q.slice(trip[0].length).trim()) : ''); return; }
     const cmd = q.match(/^\/(shopping|achat|produit|agent)\b\s*/i);
     if (cmd) { kind = /agent/i.test(cmd[1]) ? 'action' : 'shopping'; q = q.slice(cmd[0].length).trim(); if (!q) { $('q').value = cmd[0].trim() + ' '; $('q').focus(); return; } }
     if (kind === 'answer') { if (fresh) conv = []; return ask(q); }
