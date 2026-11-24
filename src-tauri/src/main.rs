@@ -2825,7 +2825,6 @@ fn open_panel_window(app: &AppHandle, win: &str, page: &str, pos: LogicalPositio
     let main = app.get_window(win).ok_or("fenêtre introuvable")?;
     let scale = main.scale_factor().unwrap_or(1.0);
     let origin = main.inner_position().map_err(|e| e.to_string())?.to_logical::<f64>(scale);
-    let phys = main.inner_position().map_err(|e| e.to_string())?;
     let w = WindowBuilder::new(app, format!("panw-{win}"))
         .decorations(false)
         .transparent(true)
@@ -2839,9 +2838,11 @@ fn open_panel_window(app: &AppHandle, win: &str, page: &str, pos: LogicalPositio
         .focused(true)
         .build()
         .map_err(|e| e.to_string())?;
-    // même écran que la fenêtre principale (pixels réels : deux écrans peuvent avoir des échelles différentes)
-    let _ = w.set_position(tauri::PhysicalPosition::new(phys.x + (pos.x * scale).round() as i32, phys.y + (pos.y * scale).round() as i32));
-    let _ = w.set_size(tauri::PhysicalSize::new((size.width * scale).round() as u32, (size.height * scale).round() as u32));
+    // même écran que la fenêtre principale (voir screen_point)
+    let _ = w.set_size(screen_size(size, scale));
+    if let Ok(p) = screen_point(&main, pos.x, pos.y) {
+        let _ = w.set_position(p);
+    }
     w.add_child(
         web(format!("panel-{win}"), WebviewUrl::App(page.into())).transparent(true).background_color(Color(0, 0, 0, 0)),
         LogicalPosition::new(0.0, 0.0),
@@ -2894,22 +2895,18 @@ fn open_popup(app: &AppHandle, win: &str, prefix: &str, mut data: serde_json::Va
     ensure_popup(app, win, prefix)?;
     let main = app.get_window(win).ok_or("fenêtre introuvable")?;
     let scale = main.scale_factor().unwrap_or(1.0);
-    let origin = main.inner_position().map_err(|e| e.to_string())?;
     let (ww, _) = window_logical_size(app, win);
     let x = x.min(ww - w - 8.0).max(4.0);
     let size = LogicalSize::new(w + 2.0 * POP_MARGIN, h + POP_MARGIN + 6.0);
-    // en pixels réels de l'écran de la fenêtre principale : avec deux écrans d'échelles différentes,
-    // une position « logique » serait convertie avec l'échelle de l'écran où la petite fenêtre
-    // se trouvait avant, d'où un aperçu à un endroit inattendu
-    let pos = tauri::PhysicalPosition::new(origin.x + ((x - POP_MARGIN) * scale).round() as i32, origin.y + (y * scale).round() as i32);
-    let psize = tauri::PhysicalSize::new((size.width * scale).round() as u32, (size.height * scale).round() as u32);
+    let pos = screen_point(&main, x - POP_MARGIN, y)?;
+    let psize = screen_size(size, scale);
     let wlabel = format!("{prefix}-{win}");
     let vlabel = format!("{}-{win}", if prefix == "prvw" { "preview" } else { "popup" });
     popup_targets().lock().unwrap_or_else(|e| e.into_inner()).insert(wlabel.clone(), pos);
     if let Some(pw) = app.get_window(&wlabel) {
-        let _ = pw.set_position(pos);
         let _ = pw.set_size(psize);
-        // Windows peut déplacer la fenêtre en changeant sa taille (changement d'échelle d'écran) : on la remet en place
+        // changer la taille peut déplacer la fenêtre (Windows : changement d'échelle ; macOS : la
+        // taille est appliquée depuis le coin bas) : la position est donnée après
         let _ = pw.set_position(pos);
     }
     if let Some(wv) = app.get_webview(&vlabel) {
@@ -2920,10 +2917,56 @@ fn open_popup(app: &AppHandle, win: &str, prefix: &str, mut data: serde_json::Va
     Ok(())
 }
 
-/// Position voulue de chaque petite fenêtre (menus, aperçu d'onglet), en pixels réels.
-fn popup_targets() -> &'static Mutex<HashMap<String, tauri::PhysicalPosition<i32>>> {
-    static M: std::sync::OnceLock<Mutex<HashMap<String, tauri::PhysicalPosition<i32>>>> = std::sync::OnceLock::new();
+/// Position voulue de chaque petite fenêtre (menus, aperçu d'onglet).
+fn popup_targets() -> &'static Mutex<HashMap<String, tauri::Position>> {
+    static M: std::sync::OnceLock<Mutex<HashMap<String, tauri::Position>>> = std::sync::OnceLock::new();
     M.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Point de l'écran situé à (x, y) dans la zone de la fenêtre principale `main`.
+/// macOS : en points (le système de coordonnées natif, le même sur tous les écrans). Une position
+/// en pixels réels y serait reconvertie avec l'échelle de la petite fenêtre, souvent encore cachée
+/// et à 1 au lieu de 2 sur un écran Retina : l'aperçu apparaissait alors n'importe où.
+/// Windows : en pixels réels de l'écran de la fenêtre principale (deux écrans peuvent avoir des
+/// échelles différentes ; une position logique serait convertie avec l'échelle du mauvais écran).
+fn screen_point(main: &tauri::Window, x: f64, y: f64) -> Result<tauri::Position, String> {
+    let scale = main.scale_factor().unwrap_or(1.0);
+    let origin = main.inner_position().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    {
+        let o = origin.to_logical::<f64>(scale);
+        Ok(tauri::Position::Logical(LogicalPosition::new(o.x + x, o.y + y)))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(tauri::Position::Physical(tauri::PhysicalPosition::new(origin.x + (x * scale).round() as i32, origin.y + (y * scale).round() as i32)))
+    }
+}
+
+/// Taille d'une petite fenêtre, dans les mêmes unités que `screen_point`.
+fn screen_size(size: LogicalSize<f64>, scale: f64) -> tauri::Size {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = scale;
+        tauri::Size::Logical(size)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        tauri::Size::Physical(tauri::PhysicalSize::new((size.width * scale).round() as u32, (size.height * scale).round() as u32))
+    }
+}
+
+/// La petite fenêtre est-elle ailleurs que là où on l'a placée ?
+fn misplaced(w: &tauri::Window, target: &tauri::Position) -> bool {
+    let Ok(o) = w.outer_position() else { return false };
+    match target {
+        tauri::Position::Physical(p) => o != *p,
+        tauri::Position::Logical(l) => {
+            let s = w.scale_factor().unwrap_or(1.0);
+            let c = o.to_logical::<f64>(s);
+            (c.x - l.x).abs() > 1.0 || (c.y - l.y).abs() > 1.0
+        }
+    }
 }
 
 fn close_popups(app: &AppHandle, win: &str) {
@@ -2952,9 +2995,11 @@ async fn popup_fit(app: AppHandle, webview: Webview, height: f64) {
     if let (Some(w), Some(scale)) = (app.get_window(&format!("{prefix}-{win}")), main_scale.or_else(|| webview.window().scale_factor().ok())) {
         let target = popup_targets().lock().unwrap_or_else(|e| e.into_inner()).get(&format!("{prefix}-{win}")).copied();
         if let Ok(size) = w.inner_size() {
-            let width = size.width as f64 / scale;
+            // largeur lue avec l'échelle de la petite fenêtre elle-même (celle avec laquelle elle a été mesurée)
+            let own = w.scale_factor().unwrap_or(scale);
+            let width = size.width as f64 / if cfg!(target_os = "macos") { own } else { scale };
             let size = LogicalSize::new(width, height.clamp(40.0, 700.0) + POP_MARGIN + 6.0);
-            let _ = w.set_size(tauri::PhysicalSize::new(size.width * scale, size.height * scale).cast::<u32>());
+            let _ = w.set_size(screen_size(size, scale));
             set_bounds(&webview, LogicalPosition::new(0.0, 0.0), size);
         }
         // aperçu déjà fermé (la souris a quitté l'onglet) : on ne le montre pas
@@ -2968,7 +3013,7 @@ async fn popup_fit(app: AppHandle, webview: Webview, height: f64) {
         // contenu prêt : la fenêtre apparaît (un menu prend le focus pour se fermer au clic ailleurs)
         let _ = w.show();
         if let Some(p) = target {
-            if w.outer_position().map(|o| o != p).unwrap_or(false) {
+            if misplaced(&w, &p) {
                 let _ = w.set_position(p);
             }
         }
