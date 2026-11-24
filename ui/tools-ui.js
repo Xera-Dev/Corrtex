@@ -3,6 +3,7 @@
 (function () {
   const C = window.Corrtex;
   const ICON = {
+    trophy: '<svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4.5v1.5A3.5 3.5 0 0 0 8 11M17 6h2.5v1.5A3.5 3.5 0 0 1 16 11"/></svg>',
     plane: '<svg viewBox="0 0 24 24"><path d="M10.5 21l1.5-6.5-4-2.5-3 1-1-1 3.5-3L6 4.5l1.5-1 5 4 4.5-4a2 2 0 0 1 3 3l-4.5 4.5 4 5-1 1.5-4.5-1.5-3 3.5z"/></svg>',
     history: '<svg viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3.5 4v4.5H8"/><path d="M12 7.5V12l3 2"/></svg>',
     download: '<svg viewBox="0 0 24 24"><path d="M12 4.5v10.5M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg>',
@@ -63,6 +64,10 @@
     const tripRow = row(ICON.plane, 'Agent voyage', '');
     tripRow.onclick = () => { close(); C.invoke('new_tab', { url: C.pageUrl('voyage.html') }); };
     l1.append(tripRow);
+    // pronostics sportifs : plusieurs sessions d'IA analysent les matchs
+    const betRow = row(ICON.trophy, 'Pronostics sportifs', '');
+    betRow.onclick = () => { close(); C.invoke('new_tab', { url: C.pageUrl('pronos.html') }); };
+    l1.append(betRow);
     g1.append(l1);
 
     // ---------------------------------------------------------------- confidentialité

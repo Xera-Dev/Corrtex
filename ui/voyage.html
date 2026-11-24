@@ -107,6 +107,27 @@
   .dest small { opacity: .85; font-size: 12.5px; }
   .dest .px { position: absolute; top: 12px; right: 12px; padding: 4px 10px; border-radius: 10px; font-size: 12.5px; font-weight: 700; background: rgba(0,0,0,.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
   .dest .px.over { background: rgba(255,90,110,.75); }
+  .dest-row { display: flex; gap: 12px; align-items: stretch; margin-bottom: 18px; }
+  .dest-row .dests { flex: 1; margin-bottom: 0; }
+  .add-dest { flex: 0 0 76px; min-height: 150px; border-radius: 20px; display: grid; place-items: center; color: var(--fg); cursor: pointer;
+    background: linear-gradient(180deg, var(--glass), var(--glass2, var(--glass))); border: 1.5px dashed color-mix(in srgb, var(--fg) 28%, transparent);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); transition: border-color .2s, transform .2s, flex-basis .25s; }
+  .add-dest:hover { border-color: var(--l1, #ff4f7b); transform: translateY(-2px); }
+  .add-dest svg { width: 30px; height: 30px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
+  .add-dest.busy { cursor: default; border-style: solid; }
+  .add-dest.busy svg { animation: spin 1.1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .add-form { flex: 0 0 280px; min-height: 150px; border-radius: 20px; padding: 14px; display: flex; flex-direction: column; gap: 8px; justify-content: center;
+    background: linear-gradient(180deg, var(--glass), var(--glass2, var(--glass))); border: 1px solid var(--glass-border);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+  .add-form b { font-size: 13.5px; }
+  .add-form input { height: 38px; border-radius: 12px; padding: 0 12px; background: rgba(0,0,0,.18); border: 1px solid var(--glass-border); color: inherit; font: inherit; font-size: 13.5px; outline: none; }
+  .add-form .row { display: flex; gap: 8px; }
+  .add-form .row button { flex: 1; height: 34px; border-radius: 11px; font-size: 13px; font-weight: 600; }
+  .add-form .row .ok { background: var(--l1, #ff4f7b); color: #fff; }
+  .add-form .row .no { background: rgba(255,255,255,.08); color: inherit; }
+  .add-err { font-size: 12px; color: #ff8a9a; }
+  @media (max-width: 720px) { .dest-row { flex-direction: column; } .add-dest { min-height: 64px; flex-basis: auto; } }
 
   .hero { position: relative; overflow: hidden; border-radius: 26px; min-height: 260px; padding: 26px; display: flex; flex-direction: column; justify-content: flex-end;
     background: var(--glass) center / cover no-repeat; color: #fff; }
@@ -374,7 +395,7 @@
         adults: +$('adults').value, kids: +$('kids').value, budget: +bud.value, modes: picked('modes'), stays: picked('stays'), styles: picked('styles'), refine: [],
       };
     }
-    function planPrompt(q) {
+    function planPrompt(q, one) {
       const who = q.adults + ' adulte(s)' + (q.kids ? ' et ' + q.kids + ' enfant(s)' : '');
       const dates = q.d1 ? 'du ' + q.d1 + (q.d2 ? ' au ' + q.d2 : '') : (q.flex || 'dates libres : propose les meilleures');
       return 'Tu es un agent de voyage expert. Prépare un voyage.\n' +
@@ -389,7 +410,7 @@
         '"transport":[{"mode":"avion|train|bateau|bus|voiture","from":"ville de départ","to":"ville d’arrivée","from_iata":"code IATA ville ou vide","to_iata":"code IATA ville ou vide","duration":"ex. 2 h 30","price_min":60,"price_max":150,"per":"personne aller-retour","details":"compagnies, gares, ports, conseils"}],' +
         '"lodging":[{"type":"hôtel|airbnb|auberge|camping","area":"quartier","price_night_min":70,"price_night_max":120,"why":"pour qui et pourquoi"}],' +
         '"budget":{"transport":0,"lodging":0,"food":0,"activities":0,"local":0,"total":0},"tips":["3 à 5 conseils pratiques (saison, formalités, monnaie, réservation)"]}]}\n' +
-        'Règles : ' + (q.to ? 'une seule destination (celle demandée)' : 'exactement 3 destinations différentes') + ' ; 2 ou 3 options de transport réalistes par destination parmi les transports acceptés, la plus intéressante en premier ; 2 options d’hébergement parmi les types souhaités ; ' +
+        'Règles : ' + (one ? 'exactement UNE destination' + (q.to ? ' (celle demandée)' : ', nouvelle') : q.to ? 'une seule destination (celle demandée)' : 'exactement 3 destinations différentes') + ' ; 2 ou 3 options de transport réalistes par destination parmi les transports acceptés, la plus intéressante en premier ; 2 options d’hébergement parmi les types souhaités ; ' +
         'prix réalistes en euros pour la période, budget = total pour tout le groupe ; respecte le budget si possible ; codes IATA de ville (PAR, LON…) quand un vol est pertinent ; « dates » = dates précises conseillées.';
     }
     function dayPrompt(q, d, dates) {
@@ -419,6 +440,7 @@
         if (!r || !Array.isArray(r.destinations) || !r.destinations.length) throw 'réponse de l’IA illisible';
         setStep(s1, 'ok', r.destinations.length > 1 ? r.destinations.length + ' destinations proposées' : 'Voyage à ' + r.destinations[0].name + ' préparé');
         trip = { id: Date.now(), q, r, days: {}, img: {}, wx: {}, saved: false };
+        adding = null;
         sel = 0;
         render();
         enrich(0);
@@ -449,16 +471,27 @@
       // les photos des autres idées, pour les cartes
       trip.r.destinations.forEach((x, k) => { if (k !== i && !t0.img[k]) photo(x).then((u) => { if (u && trip === t0) { t0.img[k] = u; render(); } }); });
     }
+    // photo de la ville elle-même (vue, rues, monuments), jamais une carte, un drapeau ou un blason
+    const NOT_PHOTO = /\b(map|carte|plan|locator|location|flag|drapeau|blason|coat[ _-]?of[ _-]?arms|arms|escudo|wappen|logo|icon|vector|svg|clipart|illustration|drawing|dessin|infographi|diagram|schema|outline|silhouette|seal|emblem|armoiries)\b|\.svg|\.gif/i;
+    function goodPhoto(x, minW) {
+      const u = x.image || '';
+      if (!/^https:/.test(u) || NOT_PHOTO.test(u) || NOT_PHOTO.test(x.title || '')) return false;
+      const w = +x.width || 0, h = +x.height || 0;
+      return w >= minW && (!h || w >= h * 1.15);
+    }
+    async function images(q) {
+      try { return JSON.parse(await invoke('search_fetch', { source: 'images', q, page: 1, form: null })).results || []; } catch (e) { return []; }
+    }
     async function photo(d) {
+      const place = d.name + (d.country ? ' ' + d.country : '');
+      const [a, b] = await Promise.all([images(place + ' ville vue panorama'), images(d.name + ' skyline city view')]);
+      const pick = a.find((x) => goodPhoto(x, 1100)) || b.find((x) => goodPhoto(x, 1100)) || a.concat(b).find((x) => goodPhoto(x, 700));
+      if (pick) return pick.image;
+      // dernier recours : la photo de l'article Wikipédia, si ce n'est ni une carte ni un drapeau
       try {
-        const j = JSON.parse(await invoke('search_fetch', { source: 'wiki', q: d.name + ' ' + (d.country || ''), page: 1, form: null }));
-        const p = ((j.query || {}).pages || [])[0];
-        if (p && p.thumbnail && /^https:/.test(p.thumbnail.source)) return p.thumbnail.source.replace(/\/(\d+)px-/, '/1280px-');
-      } catch (e) {}
-      try {
-        const j = JSON.parse(await invoke('search_fetch', { source: 'images', q: d.name + ' ' + (d.country || '') + ' paysage', page: 1, form: null }));
-        const r = (j.results || []).find((x) => /^https:/.test(x.image || '') && (x.width || 0) >= 900);
-        if (r) return r.image;
+        const j = JSON.parse(await invoke('search_fetch', { source: 'wiki', q: place, page: 1, form: null }));
+        const p = ((j.query || {}).pages || [])[0], u = p && p.thumbnail && p.thumbnail.source;
+        if (u && /^https:/.test(u) && !NOT_PHOTO.test(u) && !/\.svg/i.test(u) && (p.thumbnail.width || 0) >= (p.thumbnail.height || 0)) return u.replace(/\/(\d+)px-/, '/1280px-');
       } catch (e) {}
       return '';
     }
@@ -539,10 +572,10 @@
       const total = (x) => x.budget && x.budget.total ? x.budget.total : 0;
       let h = '';
       if (r.summary) h += '<p class="summary">' + esc(r.summary) + '</p>';
-      if (r.destinations.length > 1) {
-        h += '<div class="dests">' + r.destinations.map((x, i) => '<button class="dest' + (i === sel ? ' on' : '') + '" data-dest="' + i + '"' + (trip.img[i] ? ' style="background-image:url(\'' + esc(trip.img[i]) + '\')"' : '') + '>' +
+      {
+        h += '<div class="dest-row"><div class="dests">' + r.destinations.map((x, i) => '<button class="dest' + (i === sel ? ' on' : '') + '" data-dest="' + i + '"' + (trip.img[i] ? ' style="background-image:url(\'' + esc(trip.img[i]) + '\')"' : '') + '>' +
           (total(x) ? '<span class="px' + (q.budget < 10000 && total(x) > q.budget ? ' over' : '') + '">' + eur(total(x)) + '</span>' : '') +
-          '<b>' + esc(x.name) + '</b><small>' + esc([x.region, x.country].filter(Boolean).join(', ')) + '</small></button>').join('') + '</div>';
+          '<b>' + esc(x.name) + '</b><small>' + esc([x.region, x.country].filter(Boolean).join(', ')) + '</small></button>').join('') + '</div>' + addBox() + '</div>';
       }
       const when = dt.start ? new Date(dt.start).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) + (dt.end ? ' → ' + new Date(dt.end).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '') : '';
       h += '<div class="hero glass"' + (trip.img[sel] ? ' style="background-image:url(\'' + esc(trip.img[sel]) + '\')"' : '') + '>' +
@@ -616,6 +649,8 @@
         if (act.dataset.act === 'save') save();
         else if (act.dataset.act === 'pop') detach();
         else if (act.dataset.act === 'days') { delete trip.days[sel]; enrich(sel); render(); }
+        else if (act.dataset.act === 'add') { adding = 'form'; render(); setTimeout(() => { const i = $('add-in'); if (i) i.focus(); }, 30); }
+        else if (act.dataset.act === 'add-x') { adding = null; render(); }
         return;
       }
       const ref = e.target.closest('[data-ref]');
@@ -624,7 +659,37 @@
       // liens : nouvel onglet, la page du voyage reste ouverte
       if (a && /^https?:/.test(a.href)) { e.preventDefault(); C.invoke('new_tab', { url: a.href }); }
     });
-    $('result').addEventListener('submit', (e) => { if (e.target.id === 'refine') { e.preventDefault(); const v = $('refine-in').value.trim(); if (v) refine(v); } });
+    $('result').addEventListener('submit', (e) => { if (e.target.id === 'add-form') { e.preventDefault(); addDest($('add-in').value.trim()); return; } if (e.target.id === 'refine') { e.preventDefault(); const v = $('refine-in').value.trim(); if (v) refine(v); } });
+    // « + » : l'IA ajoute une destination de plus (celle demandée, ou une nouvelle idée)
+    let adding = null; // null | 'form' | 'busy' | {err}
+    function addBox() {
+      if (adding === 'busy') return '<div class="add-dest busy" title="L’IA prépare une nouvelle destination…"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.2-8.56"/></svg></div>';
+      if (adding === 'form' || (adding && adding.err)) return '<form class="add-form" id="add-form"><b>Ajouter une destination</b><input id="add-in" placeholder="Ville, pays ou envie (vide : idée de l’IA)" autocomplete="off">' +
+        (adding.err ? '<span class="add-err">' + esc(adding.err) + '</span>' : '') + '<div class="row"><button type="button" class="no" data-act="add-x">Annuler</button><button class="ok">Ajouter</button></div></form>';
+      return '<button class="add-dest" data-act="add" title="Demander à l’IA une autre destination"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>';
+    }
+    async function addDest(hint) {
+      if (!trip || adding === 'busy') return;
+      const t0 = trip, names = t0.r.destinations.map((x) => x.name);
+      adding = 'busy';
+      render();
+      const q = Object.assign({}, t0.q, { to: hint || '', refine: t0.q.refine.concat([hint ? 'ajoute cette destination : ' + hint : 'propose UNE nouvelle destination différente de : ' + names.join(', ')]) });
+      try {
+        const txt = await ask(planPrompt(q, true), 1, 150000);
+        const j = json(txt), d = j && Array.isArray(j.destinations) && j.destinations[0];
+        if (!d || !d.name) throw 'réponse de l’IA illisible';
+        if (trip !== t0) return;
+        t0.r.destinations.push(d);
+        adding = null;
+        sel = t0.r.destinations.length - 1;
+        t0.saved = false;
+        render();
+        enrich(sel);
+      } catch (e) {
+        if (trip === t0) { adding = { err: 'Échec : ' + e }; render(); }
+      }
+    }
+
     function refine(t) {
       if (!trip) return;
       const q = Object.assign({}, trip.q, { refine: trip.q.refine.concat([t === 'Autres idées' ? 'propose d’autres destinations que ' + trip.r.destinations.map((x) => x.name).join(', ') : t]) });
@@ -684,6 +749,7 @@
       const x = loadSaved().find((y) => String(y.id) === b.dataset.trip);
       if (!x) return;
       trip = { id: x.id, q: x.q, r: x.r, days: x.days || {}, img: x.img || {}, wx: {}, saved: true };
+      adding = null;
       sel = 0;
       $('saved').classList.remove('open');
       render();

@@ -187,6 +187,7 @@
     <button id="cmp-btn" class="mi"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="7" height="14" rx="1.5"/><rect x="13.5" y="5" width="7" height="14" rx="1.5"/><path d="M5.8 9h2.4M15.8 9h2.4M5.8 12h2.4M15.8 12h2.4"/></svg><span><b>Comparer des onglets</b><small>2 ou 3 pages côte à côte</small></span></button>
     <button id="agent-btn" class="mi"><svg viewBox="0 0 24 24"><path d="M5 4.5l5.5 14 2-5.8 5.8-2z"/><path d="M13 13l5.5 5.5"/><path d="M18.5 3.5v3M17 5h3"/></svg><span><b>Agent</b><small>L’IA agit sur la page, vous validez chaque action</small></span></button>
     <button id="trip-btn" class="mi"><svg viewBox="0 0 24 24"><path d="M10.5 21l1.5-6.5-4-2.5-3 1-1-1 3.5-3L6 4.5l1.5-1 5 4 4.5-4a2 2 0 0 1 3 3l-4.5 4.5 4 5-1 1.5-4.5-1.5-3 3.5z"/></svg><span><b>Agent voyage</b><small>Vols, trains, bateaux, hôtels, Airbnb selon votre budget</small></span></button>
+    <button id="bet-btn" class="mi"><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4.5v1.5A3.5 3.5 0 0 0 8 11M17 6h2.5v1.5A3.5 3.5 0 0 1 16 11"/></svg><span><b>Pronostics sportifs</b><small>Forme, face-à-face et cotes analysés par plusieurs IA</small></span></button>
     <button id="view-btn" class="mi"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.6 3.6 5.4 3.6 8.5s-1.2 5.9-3.6 8.5c-2.4-2.6-3.6-5.4-3.6-8.5s1.2-5.9 3.6-8.5z"/></svg><span><b id="view-t">Afficher le site de l’IA</b><small id="view-s">Pour vous connecter ou retrouver vos discussions</small></span></button>
     <button id="skin" class="mi"><svg viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.1 0 1.7-.9 1.4-1.9-.3-1 .4-2 1.5-2h2a3.6 3.6 0 0 0 3.6-3.6c0-5.3-3.8-9.5-8.5-9.5z"/><circle cx="7.8" cy="11" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="15" cy="7.8" r="1"/></svg><span><b>Style Corrtex sur l’IA</b><small>Habille la page de l’IA aux couleurs de Corrtex</small></span></button>
   </div>
@@ -591,6 +592,7 @@
       }
 
       document.getElementById('trip-btn').addEventListener('click', () => C.invoke('new_tab', { url: C.pageUrl('voyage.html') }));
+      document.getElementById('bet-btn').addEventListener('click', () => C.invoke('new_tab', { url: C.pageUrl('pronos.html') }));
       document.getElementById('skin').addEventListener('click', () => C.invoke('toggle_ai_skin'));
       document.getElementById('reload').addEventListener('click', () => C.invoke('set_ai_provider', { id: current }));
       document.getElementById('close').addEventListener('click', () => C.invoke('toggle_sidebar'));

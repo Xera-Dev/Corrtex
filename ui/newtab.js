@@ -69,7 +69,7 @@
 
 
   // commandes du mode IA, proposées dès qu'on tape « / »
-  const CMDS = [['/shopping', 'Recherche de produits : comparaison des meilleurs articles et suivi des prix'], ['/voyage', 'Agent voyage : vols, trains, bateaux, hôtels et Airbnb selon votre budget'], ['/agent', 'L’agent agit sur le web pour vous (réservation, formulaire…)']];
+  const CMDS = [['/shopping', 'Recherche de produits : comparaison des meilleurs articles et suivi des prix'], ['/voyage', 'Agent voyage : vols, trains, bateaux, hôtels et Airbnb selon votre budget'], ['/pronos', 'Pronostics sportifs : forme, face-à-face et cotes analysés par plusieurs IA'], ['/agent', 'L’agent agit sur le web pour vous (réservation, formulaire…)']];
   function cmdSugg(typed) {
     const box = $('sugg');
     const list = CMDS.filter((c) => c[0].startsWith(typed.toLowerCase()));
@@ -96,7 +96,7 @@
   function setAi(on) {
     aiOn = on;
     sbox.classList.toggle('ai', on);
-    $('q').placeholder = on ? 'Posez une question… (/shopping, /voyage, /agent)' : 'Rechercher avec Corrtex ou saisir une URL';
+    $('q').placeholder = on ? 'Posez une question… (/shopping, /voyage, /pronos, /agent)' : 'Rechercher avec Corrtex ou saisir une URL';
     $('aibtn').title = on ? 'Revenir à la recherche classique' : 'Recherche IA : l’IA répond directement ici';
     if (on) { hideSugg(); C.invoke('search_warm'); C.invoke('shop_ai_warm', { slots: [3, 2] }); }
     C.save('homeAI', on);
@@ -265,6 +265,9 @@
     q = clean(q);
     if (!q) return;
     let kind = forceAgent ? 'action' : 'answer';
+    // /pronos : le prédicteur de paris sportifs s'ouvre avec la demande (équipe, match, sport…)
+    const bet = q.match(/^\/(pronos?|pronostics?|paris?|bet)\b\s*/i);
+    if (bet) { location.href = C.pageUrl('pronos.html') + (q.slice(bet[0].length).trim() ? '#q=' + encodeURIComponent(q.slice(bet[0].length).trim()) : ''); return; }
     // /voyage : l'agent voyage s'ouvre avec la demande
     const trip = q.match(/^\/(voyage|voyages|trip)\b\s*/i);
     if (trip) { location.href = C.pageUrl('voyage.html') + (q.slice(trip[0].length).trim() ? '#q=' + encodeURIComponent(q.slice(trip[0].length).trim()) : ''); return; }

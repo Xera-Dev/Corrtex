@@ -200,6 +200,20 @@ async fn fetch_source(source: &str, q: &str, page: u32, form: &str) -> Result<St
             )
             .await
         }
+        // pronostics : données sportives publiques d'ESPN (calendrier, résultats, forme, face-à-face,
+        // classements, blessures, cotes), sans clé. q = chemin après /sports/, ex. « soccer/fra.1/scoreboard?dates=20261124 » ;
+        // « v2/… » pour les classements (soccer/fra.1/standings).
+        "espn" => {
+            let ok = !q.contains("..") && q.len() < 260 && q.bytes().all(|b| b.is_ascii_alphanumeric() || b"./_-?=&,".contains(&b));
+            if !ok {
+                return Err("demande sportive invalide".into());
+            }
+            let url = match q.strip_prefix("v2/") {
+                Some(rest) => format!("https://site.api.espn.com/apis/v2/sports/{rest}"),
+                None => format!("https://site.api.espn.com/apis/site/v2/sports/{q}"),
+            };
+            text_of(c.get(url).header(ACCEPT, "application/json"), "ESPN").await
+        }
         // fiche d'une personne (Wikidata) : q est l'identifiant Wikidata (Q517…)
         "person" => person_card(q).await,
         "images" | "news" | "videos" => {

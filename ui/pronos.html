@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Pronostics IA – Corrtex</title>
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="theme.css">
+<script src="common.js"></script>
+<style>
+  /* Pronostics IA : calendrier, forme, classement, face-à-face, absences et cotes (ESPN, sans clé) et
+     actualités ; trois sessions d'IA cachées analysent chaque match en parallèle, Corrtex croise leurs avis. */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--page-2); }
+  body { min-height: 100vh; color: var(--fg); font: 15px/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: linear-gradient(180deg, var(--page-1), var(--page-2) 80vh) fixed; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { background: none; border: 0; cursor: pointer; }
+  a { color: inherit; text-decoration: none; }
+  svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* fond animé (comme l'accueil) */
+  #ambient { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+  .blob { position: absolute; width: 85vmax; height: 85vmax; border-radius: 50%; left: calc(50% - 42.5vmax); top: calc(50% - 42.5vmax);
+    background: radial-gradient(circle, var(--c) 0%, color-mix(in srgb, var(--c) 45%, transparent) 28%, transparent 66%);
+    opacity: calc(var(--light-strength) * var(--intensity, 1)); will-change: transform; }
+  [data-theme="graphite"] .blob, [data-theme="minuit"] .blob, [data-theme="ocean"] .blob { mix-blend-mode: screen; }
+  .b1 { --c: var(--l1, #ff4f7b); animation: drift1 34s ease-in-out infinite alternate; }
+  .b2 { --c: var(--l2, #ff8a3d); animation: drift2 42s ease-in-out infinite alternate; width: 70vmax; height: 70vmax; }
+  .b3 { --c: var(--l3, #c86bff); animation: drift3 51s ease-in-out infinite alternate; width: 60vmax; height: 60vmax; }
+  @keyframes drift1 { 0% { transform: translate(-38vw, -30vh); } 50% { transform: translate(24vw, -10vh) scale(1.12); } 100% { transform: translate(-20vw, 30vh); } }
+  @keyframes drift2 { 0% { transform: translate(36vw, 28vh); } 50% { transform: translate(-26vw, 10vh) scale(.9); } 100% { transform: translate(24vw, -30vh); } }
+  @keyframes drift3 { 0% { transform: translate(6vw, -36vh); } 50% { transform: translate(-34vw, 4vh) scale(1.2); } 100% { transform: translate(34vw, 10vh); } }
+  .light-off .blob { opacity: 0; } .paused .blob { animation-play-state: paused; }
+
+  main { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 34px clamp(16px, 4vw, 48px) 80px; }
+  .glass { background: var(--card); border: 1px solid var(--glass-border); border-radius: 24px;
+    box-shadow: 0 18px 46px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.08); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); }
+  .soft { background: var(--glass); border: 1px solid var(--hover); border-radius: 18px; }
+
+  /* ------------------------------------------------ en-tête */
+  .top { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+  .top .ic { width: 46px; height: 46px; border-radius: 15px; display: grid; place-items: center; background: color-mix(in srgb, var(--l1, #ff4f7b) 22%, transparent); color: var(--l1, #ff4f7b); }
+  .top .ic svg { width: 26px; height: 26px; }
+  .top h1 { font: 700 30px/1.1 'Poppins', "Segoe UI", sans-serif; letter-spacing: -.4px; }
+  .top p { color: var(--fg-dim); font-size: 13.5px; }
+  .top .sp { flex: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 15px; border-radius: 19px; font-size: 13.5px; font-weight: 600; background: var(--glass); border: 1px solid var(--glass-border); }
+  .pill:hover { background: var(--hover); }
+  .pill svg { width: 17px; height: 17px; }
+
+  /* ------------------------------------------------ formulaire */
+  #form { padding: 22px; }
+  #wish { width: 100%; resize: none; min-height: 54px; padding: 14px 18px; border-radius: 18px; outline: 0; font-size: 16px; line-height: 1.45; color: var(--fg);
+    background: var(--glass); border: 1px solid var(--glass-border); }
+  #wish:focus { border-color: color-mix(in srgb, var(--l1, #ff4f7b) 60%, var(--glass-border)); }
+  #wish::placeholder, .f input::placeholder { color: var(--fg-dim); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-top: 14px; }
+  .f { display: flex; flex-direction: column; gap: 5px; }
+  .f label { font-size: 11.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--fg-dim); }
+  .f input, .f select { height: 42px; padding: 0 13px; border-radius: 13px; outline: 0; background: var(--glass); border: 1px solid var(--glass-border); color-scheme: dark light; }
+  .f input:focus, .f select:focus { border-color: color-mix(in srgb, var(--l1, #ff4f7b) 60%, var(--glass-border)); }
+  .f select option { background: var(--page-2); }
+  .row2 { display: flex; gap: 8px; } .row2 input, .row2 select { flex: 1; min-width: 0; width: 100%; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button { height: 34px; padding: 0 13px; border-radius: 17px; font-size: 13px; color: var(--fg-dim); background: var(--glass); border: 1px solid var(--hover); display: inline-flex; align-items: center; gap: 6px; }
+  .chips button svg { width: 15px; height: 15px; }
+  .chips button:hover { color: var(--fg); }
+  .chips button.on { color: var(--fg); border-color: color-mix(in srgb, var(--l1, #ff4f7b) 70%, transparent); background: color-mix(in srgb, var(--l1, #ff4f7b) 20%, transparent); }
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 16px; }
+  .budget { display: flex; align-items: center; gap: 12px; }
+  .budget input[type=range] { flex: 1; accent-color: var(--l1, #ff4f7b); }
+  .budget output { min-width: 90px; text-align: right; font-weight: 700; }
+  .go { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+  .go .note { flex: 1; font-size: 12.5px; color: var(--fg-dim); }
+  .btn { height: 46px; padding: 0 24px; border-radius: 23px; font-weight: 700; font-size: 15px; display: inline-flex; align-items: center; gap: 9px;
+    background: linear-gradient(135deg, var(--l1, #ff4f7b), var(--l3, #c86bff)); color: #fff; box-shadow: 0 10px 26px color-mix(in srgb, var(--l1, #ff4f7b) 35%, transparent); }
+  .btn:hover { filter: brightness(1.08); } .btn:disabled { opacity: .5; pointer-events: none; }
+  .btn svg { width: 19px; height: 19px; }
+  .ex { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .ex button { font-size: 12.5px; padding: 5px 11px; border-radius: 12px; color: var(--fg-dim); background: transparent; border: 1px dashed var(--glass-border); }
+  .ex button:hover { color: var(--fg); border-style: solid; }
+
+  /* ------------------------------------------------ progression */
+  #progress { margin-top: 22px; padding: 20px 22px; display: none; }
+  #progress.on { display: block; }
+  .steps { list-style: none; display: flex; flex-direction: column; gap: 9px; }
+  .steps li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--fg-dim); }
+  .steps li::before { content: ""; width: 15px; height: 15px; border-radius: 50%; border: 2px solid var(--fg-dim); flex: none; }
+  .steps li.ok { color: var(--fg); } .steps li.ok::before { background: #3ddc97; border-color: #3ddc97; }
+  .steps li.run { color: var(--fg); } .steps li.run::before { border-color: var(--l1, #ff4f7b); border-top-color: transparent; animation: spin .8s linear infinite; }
+  .steps li.err { color: #ff8a9a; } .steps li.err::before { border-color: #ff7a8a; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .err-box { margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  @keyframes rin { from { opacity: 0; transform: translateY(8px); } }
+  /* ------------------------------------------------ pronostics */
+  .sports { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .sports button { height: 40px; padding: 0 15px; border-radius: 20px; font-size: 13.5px; font-weight: 600; color: var(--fg-dim); background: var(--glass); border: 1px solid var(--hover); display: inline-flex; align-items: center; gap: 8px; }
+  .sports button svg { width: 18px; height: 18px; }
+  .sports button:hover { color: var(--fg); }
+  .sports button.on { color: var(--fg); border-color: color-mix(in srgb, var(--l1, #ff4f7b) 70%, transparent); background: color-mix(in srgb, var(--l1, #ff4f7b) 22%, transparent); }
+  #fx { margin-top: 22px; padding: 18px 20px; display: none; }
+  #fx.on { display: block; animation: rin .4s ease; }
+  #fx h3 { display: flex; align-items: center; gap: 10px; font-size: 16px; margin-bottom: 12px; }
+  #fx h3 svg { width: 20px; height: 20px; color: var(--l1, #ff4f7b); flex: none; }
+  #fx h3 small { margin-left: auto; font-weight: 500; font-size: 12.5px; color: var(--fg-dim); }
+  .lg { font-size: 11.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--fg-dim); margin: 14px 0 8px; }
+  .lg:first-of-type { margin-top: 0; }
+  .mxs { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 8px; }
+  .mx { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 16px; text-align: left; background: var(--glass); border: 1px solid var(--hover); }
+  .mx:hover { background: var(--hover); }
+  .mx .ck { width: 20px; height: 20px; border-radius: 7px; border: 2px solid var(--fg-dim); display: grid; place-items: center; }
+  .mx.on { border-color: color-mix(in srgb, var(--l1, #ff4f7b) 70%, transparent); background: color-mix(in srgb, var(--l1, #ff4f7b) 14%, transparent); }
+  .mx.on .ck { background: var(--l1, #ff4f7b); border-color: var(--l1, #ff4f7b); }
+  .mx.on .ck::after { content: ""; width: 9px; height: 5px; border: solid #fff; border-width: 0 0 2px 2px; transform: translateY(-1px) rotate(-45deg); }
+  .tm { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; min-width: 0; }
+  .tm span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tm img, .lg-ph { width: 20px; height: 20px; object-fit: contain; flex: none; border-radius: 4px; }
+  .lg-ph { display: grid; place-items: center; font-size: 10px; font-weight: 700; background: var(--hover); }
+  .mx .tm span { max-width: 100%; }
+  .mx > div { min-width: 0; }
+  .mx .when { font-size: 12px; color: var(--fg-dim); text-align: right; white-space: nowrap; }
+  .mx .when b { display: block; color: var(--fg); font-size: 13px; }
+  .live { display: inline-block; padding: 1px 7px; border-radius: 8px; font-size: 11px; font-weight: 700; background: #ff4d5e; color: #fff; }
+  .oddsl { display: flex; gap: 5px; margin-top: 4px; justify-content: flex-end; }
+  .oddsl i { font-style: normal; font-size: 11px; padding: 1px 6px; border-radius: 7px; background: var(--hover); color: var(--fg-dim); }
+  .fxbar { position: sticky; bottom: 14px; display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 10px 10px 10px 18px; border-radius: 22px; z-index: 3; }
+  .fxbar span { flex: 1; font-size: 13.5px; color: var(--fg-dim); }
+  .empty { font-size: 14px; color: var(--fg-dim); padding: 6px 2px; line-height: 1.6; }
+
+  #out { margin-top: 24px; display: none; }
+  #out.on { display: block; animation: rin .4s ease; }
+  .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 16px; }
+  .pm { padding: 20px; display: flex; flex-direction: column; gap: 14px; position: relative; overflow: hidden; }
+  .pm .cmp { font-size: 12px; color: var(--fg-dim); display: flex; gap: 8px; align-items: center; }
+  .pm .cmp .sess { margin-left: auto; display: inline-flex; gap: 4px; align-items: center; }
+  .sess i { width: 9px; height: 9px; border-radius: 50%; background: var(--hover); border: 1px solid var(--glass-border); }
+  .sess i.ok { background: #3ddc97; border-color: #3ddc97; }
+  .sess i.run { border-color: var(--l1, #ff4f7b); border-top-color: transparent; animation: spin .8s linear infinite; }
+  .sess i.ko { background: #ff7a8a; border-color: #ff7a8a; }
+  .vs { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; }
+  .vs .t { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; font-weight: 700; font-size: 15px; line-height: 1.2; }
+  .vs .t img, .vs .t .lg-ph { width: 46px; height: 46px; border-radius: 10px; }
+  .vs .t .lg-ph { font-size: 15px; }
+  .vs .t small { font-weight: 500; font-size: 11.5px; color: var(--fg-dim); }
+  .vs .mid { text-align: center; }
+  .vs .mid .sc { font: 700 30px/1 'Poppins', "Segoe UI", sans-serif; letter-spacing: 1px; }
+  .vs .mid small { display: block; font-size: 11px; color: var(--fg-dim); margin-top: 4px; }
+  .fchips { display: flex; gap: 3px; justify-content: center; }
+  .fchips i { width: 17px; height: 17px; border-radius: 5px; font: 700 10px/17px system-ui, sans-serif; font-style: normal; color: #fff; text-align: center; }
+  .fchips .W { background: #2fbf71; } .fchips .D { background: #8a8f9c; } .fchips .L { background: #e5484d; }
+  .pbar { display: flex; height: 34px; border-radius: 12px; overflow: hidden; gap: 2px; }
+  .pbar div { display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 700; color: #fff; min-width: 34px; transition: flex-grow .5s ease; }
+  .pbar .h { background: linear-gradient(135deg, var(--l1, #ff4f7b), color-mix(in srgb, var(--l1, #ff4f7b) 70%, #000)); }
+  .pbar .d { background: #6b7080; }
+  .pbar .a { background: linear-gradient(135deg, var(--l3, #c86bff), color-mix(in srgb, var(--l3, #c86bff) 70%, #000)); }
+  .plab { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--fg-dim); margin-top: -8px; }
+  .mkt { font-size: 11.5px; color: var(--fg-dim); }
+  .best { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 14px 16px; border-radius: 18px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--l1, #ff4f7b) 26%, transparent), color-mix(in srgb, var(--l3, #c86bff) 18%, transparent)); border: 1px solid color-mix(in srgb, var(--l1, #ff4f7b) 45%, transparent); }
+  .best .bi { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: rgba(255,255,255,.14); }
+  .best .bi svg { width: 21px; height: 21px; }
+  .best small { display: block; font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; opacity: .8; }
+  .best b { font-size: 16px; }
+  .best .pr { text-align: right; }
+  .best .pr b { font: 700 22px/1 'Poppins', "Segoe UI", sans-serif; }
+  .best .pr small { text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .value { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 8px; font-size: 11px; font-weight: 700; background: #2fbf71; color: #fff; vertical-align: 2px; }
+  .gauge { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--fg-dim); }
+  .gauge .g { flex: 1; height: 7px; border-radius: 4px; background: var(--hover); overflow: hidden; }
+  .gauge .g i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #e5484d, #f5a524 45%, #2fbf71); }
+  .gauge b { color: var(--fg); }
+  .picks { display: flex; flex-direction: column; gap: 6px; }
+  .pk { display: grid; grid-template-columns: 1fr 120px 46px; gap: 10px; align-items: center; font-size: 13.5px; }
+  .pk .mk { font-size: 11px; color: var(--fg-dim); display: block; }
+  .pk .bar { height: 6px; border-radius: 3px; background: var(--hover); overflow: hidden; }
+  .pk .bar i { display: block; height: 100%; background: var(--l1, #ff4f7b); border-radius: 3px; }
+  .pk b { text-align: right; font-size: 13px; }
+  .pk .v { font-size: 10.5px; color: var(--fg-dim); margin-left: 4px; }
+  .keys { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .keys li { font-size: 13.5px; padding-left: 20px; position: relative; line-height: 1.45; }
+  .keys li::before { content: "▸"; position: absolute; left: 2px; color: var(--l1, #ff4f7b); }
+  .pm .sum { font-size: 13.5px; line-height: 1.55; color: color-mix(in srgb, var(--fg) 88%, transparent); }
+  .pm h4 { font-size: 11.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--fg-dim); margin-bottom: 6px; }
+  details.data { border-top: 1px solid var(--hover); padding-top: 10px; }
+  details.data summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--fg-dim); list-style: none; display: flex; align-items: center; gap: 6px; }
+  details.data summary::before { content: "›"; font-size: 17px; transition: transform .2s; }
+  details.data[open] summary::before { transform: rotate(90deg); }
+  .dg { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; font-size: 12.5px; }
+  .dg > div { background: var(--glass); border: 1px solid var(--hover); border-radius: 14px; padding: 10px 12px; }
+  .dg .full { grid-column: 1 / -1; }
+  .dg ul { list-style: none; display: flex; flex-direction: column; gap: 3px; }
+  .dg li { display: flex; gap: 6px; } .dg li i { font-style: normal; font-weight: 700; width: 14px; }
+  .dg .W { color: #2fbf71; } .dg .D { color: #9aa0ab; } .dg .L { color: #e5484d; }
+  .views { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .views div { font-size: 12.5px; padding: 9px 12px; border-radius: 12px; background: var(--glass); border: 1px solid var(--hover); }
+  .views b { display: block; font-size: 12px; margin-bottom: 2px; }
+  .pm .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pm .acts button, .pm .acts a { height: 32px; padding: 0 12px; border-radius: 16px; font-size: 12.5px; font-weight: 600; background: var(--glass); border: 1px solid var(--hover); display: inline-flex; align-items: center; gap: 6px; }
+  .pm .acts button:hover, .pm .acts a:hover { background: var(--hover); }
+  .pm .acts svg { width: 15px; height: 15px; }
+  .pm .wait { font-size: 13px; color: var(--fg-dim); display: flex; align-items: center; gap: 8px; }
+  .pm .wait::before { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--l1, #ff4f7b); border-top-color: transparent; animation: spin .8s linear infinite; }
+  .rank { display: flex; flex-direction: column; gap: 6px; }
+  .rank .pk { grid-template-columns: 1fr 150px 46px; }
+  .combo { margin-top: 16px; padding: 20px; }
+  .combo h3 { display: flex; align-items: center; gap: 10px; font-size: 16px; margin-bottom: 10px; }
+  .combo h3 svg { width: 20px; height: 20px; color: var(--l1, #ff4f7b); }
+  .combo ol { padding-left: 20px; display: flex; flex-direction: column; gap: 5px; font-size: 14px; }
+  .combo .tot { margin-top: 12px; display: flex; gap: 18px; flex-wrap: wrap; font-size: 13.5px; color: var(--fg-dim); }
+  .combo .tot b { color: var(--fg); font-size: 16px; }
+  .resp { margin-top: 26px; font-size: 12px; color: var(--fg-dim); text-align: center; line-height: 1.6; }
+
+  /* historique */
+  #saved { position: fixed; top: 0; right: 0; bottom: 0; width: min(400px, 92vw); z-index: 10; padding: 22px; transform: translateX(105%); transition: transform .3s ease; border-radius: 24px 0 0 24px; overflow-y: auto; }
+  #saved.open { transform: none; }
+  #saved h3 { display: flex; align-items: center; margin-bottom: 10px; font-size: 17px; }
+  #saved h3 button { margin-left: auto; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; }
+  #saved h3 button:hover { background: var(--hover); }
+  #saved h3 svg { width: 17px; height: 17px; }
+  .rate { font-size: 13px; color: var(--fg-dim); margin-bottom: 12px; }
+  .rate b { color: var(--fg); font-size: 15px; }
+  .hv { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 10px 12px; border-radius: 14px; background: var(--glass); border: 1px solid var(--hover); font-size: 13px; }
+  .hv + .hv { margin-top: 7px; }
+  .hv small { display: block; color: var(--fg-dim); font-size: 11.5px; }
+  .hv .st { font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 8px; background: var(--hover); white-space: nowrap; }
+  .hv .st.ok { background: #2fbf71; color: #fff; } .hv .st.ko { background: #e5484d; color: #fff; }
+  .hv .x { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: var(--fg-dim); }
+  .hv .x:hover { background: var(--hover); color: var(--fg); }
+  .hv .x svg { width: 13px; height: 13px; }
+  @media (max-width: 640px) { .dg { grid-template-columns: 1fr; } .pk { grid-template-columns: 1fr 70px 42px; } }
+</style>
+</head>
+<body>
+  <div id="ambient" aria-hidden="true"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+  <main>
+    <div class="top">
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4.5v1.5A3.5 3.5 0 0 0 8 11M17 6h2.5v1.5A3.5 3.5 0 0 1 16 11"/></svg></div>
+      <div><h1>Pronostics IA</h1><p>Forme, classement, face-à-face, absences et cotes : plusieurs sessions d’IA analysent chaque match.</p></div>
+      <div class="sp"></div>
+      <button class="pill" id="saved-btn"><svg viewBox="0 0 24 24"><path d="M6.5 4h11v16l-5.5-3.5L6.5 20z"/></svg>Mes pronostics</button>
+    </div>
+
+    <form id="form" class="glass" autocomplete="off">
+      <div class="f"><label>Sport</label><div class="sports" id="sports"></div></div>
+      <div class="grid">
+        <div class="f"><label for="comp">Compétition</label><select id="comp"></select></div>
+        <div class="f"><label for="who">Équipe, joueur ou match</label><input id="who" placeholder="Optionnel : PSG, Real - Barça…"></div>
+        <div class="f"><label>Quand</label><div class="chips" id="when"></div></div>
+      </div>
+      <div class="opts">
+        <div class="f"><label>Types de paris</label><div class="chips" id="markets"></div></div>
+        <div class="f"><label>Profil</label><div class="chips" id="risk"></div></div>
+      </div>
+      <div class="go">
+        <span class="note">Les données (calendrier, résultats, classement, absences, cotes) viennent d’ESPN et des actualités ; trois sessions d’IA les analysent en parallèle, puis Corrtex croise leurs avis.</span>
+        <button class="btn" id="go"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>Trouver les matchs</button>
+      </div>
+    </form>
+
+    <div id="fx" class="glass"></div>
+    <div id="progress" class="glass"><ul class="steps" id="steps"></ul><div class="err-box" id="err" hidden></div></div>
+    <div id="out"></div>
+    <p class="resp">Les pronostics sont des estimations, jamais des certitudes : ne misez que ce que vous pouvez vous permettre de perdre. Les paris sont interdits aux moins de 18 ans.<br>Besoin d’aide ? Joueurs Info Service : 09 74 75 13 13 (appel non surtaxé).</p>
+  </main>
+
+  <aside id="saved" class="glass"><h3>Mes pronostics<button id="saved-x" title="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></h3><div id="saved-list"></div></aside>
+
+  <script>
+  (function () {
+    const C = window.Corrtex;
+    const $ = (id) => document.getElementById(id);
+    const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const invoke = (c, a) => window.__TAURI__.core.invoke(c, a);
+    const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    const pct = (p) => Math.round((p || 0) * 100) + ' %';
+    const ord = (r) => String(r) === '1' ? '1er' : r + 'e';
+    const num = (x) => { const n = parseFloat(String(x == null ? '' : x).replace(',', '.')); return isNaN(n) ? null : n; };
+
+    // ------------------------------------------------------------ thème et fond (comme l'accueil)
+    function theme() {
+      C.applyTheme();
+      const p = C.prefs();
+      const hex = /^#[0-9a-f]{6}$/i.test(p.light) ? p.light : '#ff4f7b';
+      const n = parseInt(hex.slice(1), 16), r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+      const s = d ? (l > .5 ? d / (2 - mx - mn) : d / (mx + mn)) : 0;
+      const h = !d ? 0 : mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      const hsl = (hh, ss, ll) => 'hsl(' + ((hh % 360) + 360) % 360 + ' ' + Math.round(ss * 100) + '% ' + Math.round(ll * 100) + '%)';
+      const st = document.documentElement.style;
+      st.setProperty('--l1', hsl(h * 60, s, l));
+      st.setProperty('--l2', hsl(h * 60 + 38, s, Math.min(.7, l + .05)));
+      st.setProperty('--l3', hsl(h * 60 - 42, s * .9, Math.max(.35, l - .05)));
+      st.setProperty('--intensity', p.lightIntensity);
+      document.documentElement.classList.toggle('light-off', !p.lightOn);
+    }
+    theme();
+    window.addEventListener('storage', (e) => { if (e.key === 'corrtex.prefs') theme(); });
+    document.addEventListener('visibilitychange', () => document.documentElement.classList.toggle('paused', document.hidden));
+
+    // ------------------------------------------------------------ icônes
+    const I = {
+      ball: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5l3.5 2.5-1.3 4h-4.4l-1.3-4zM12 3.5v4M15.5 10l4.3-1.4M14.2 14l2.6 3.7M9.8 14l-2.6 3.7M8.5 10L4.2 8.6"/>',
+      basket: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5v17M6 6c2.5 2 3.5 4 3.5 6S8.5 16 6 18M18 6c-2.5 2-3.5 4-3.5 6s1 4 3.5 6"/>',
+      tennis: '<circle cx="12" cy="12" r="8.5"/><path d="M5.5 6.5c3 2 4 5 3 9.5M18.5 6.5c-3 2-4 5-3 9.5" transform="rotate(20 12 12)"/>',
+      rugby: '<ellipse cx="12" cy="12" rx="9" ry="5.5" transform="rotate(-35 12 12)"/><path d="M9 15l6-6M10.5 11l2.5 2.5M12.5 9.5l2 2M8.5 12.5l2 2"/>',
+      hockey: '<path d="M7 3.5l4 13H5.5a2 2 0 0 0 0 4H13l4-17"/><ellipse cx="17.5" cy="19" rx="3" ry="1.5"/>',
+      nfl: '<ellipse cx="12" cy="12" rx="9" ry="5" transform="rotate(-45 12 12)"/><path d="M9.5 14.5l5-5M10.5 11.5l2 2M12 10l2 2"/>',
+      baseball: '<circle cx="12" cy="12" r="8.5"/><path d="M6.5 5.5c2 2 2.5 4.5 2.5 6.5s-.5 4.5-2.5 6.5M17.5 5.5c-2 2-2.5 4.5-2.5 6.5s.5 4.5 2.5 6.5"/>',
+      mma: '<path d="M7 11V7.5a2 2 0 0 1 4 0V6a2 2 0 0 1 4 0v1.5a2 2 0 0 1 4 0V13a7 7 0 0 1-7 7h-1a6 6 0 0 1-6-6v-1.5a2 2 0 0 1 2-2h3"/>',
+      f1: '<path d="M4 4.5v16M4 5h14l-2.5 4L18 13H4"/><path d="M8 5v8M12 5v8"/>',
+      esport: '<path d="M7 8h10a4 4 0 0 1 4 4v1.5a3 3 0 0 1-5.4 1.8L14.5 14h-5l-1.1 1.3A3 3 0 0 1 3 13.5V12a4 4 0 0 1 4-4z"/><path d="M8 10.5v3M6.5 12h3M15.5 11.5h.01M17.5 13h.01"/>',
+      star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/>',
+      save: '<path d="M6.5 4h11v16l-5.5-3.5L6.5 20z"/>',
+      ext: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 19V7.5A1.5 1.5 0 0 1 5.5 6H10"/>',
+      layers: '<path d="M12 3.5l8.5 4.5-8.5 4.5L3.5 8z"/><path d="M3.5 12.5l8.5 4.5 8.5-4.5M3.5 16.5L12 21l8.5-4.5"/>',
+      redo: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4.5V11h-6.5"/>',
+    };
+    const svg = (k) => '<svg viewBox="0 0 24 24">' + I[k] + '</svg>';
+
+    // ------------------------------------------------------------ sports et compétitions (chemins ESPN)
+    const TOP = ['soccer/fra.1', 'soccer/eng.1', 'soccer/esp.1', 'soccer/ita.1', 'soccer/ger.1', 'soccer/uefa.champions', 'soccer/uefa.europa', 'soccer/uefa.europa.conf'];
+    const SPORTS = [
+      { id: 'soccer', label: 'Football', icon: 'ball', draw: true, unit: 'buts', comps: [
+        ['top', 'Grands championnats et coupes d’Europe'], ['soccer/fra.1', 'Ligue 1'], ['soccer/fra.2', 'Ligue 2'], ['soccer/eng.1', 'Premier League'], ['soccer/esp.1', 'LaLiga'],
+        ['soccer/ita.1', 'Serie A'], ['soccer/ger.1', 'Bundesliga'], ['soccer/uefa.champions', 'Ligue des champions'], ['soccer/uefa.europa', 'Ligue Europa'],
+        ['soccer/uefa.europa.conf', 'Ligue Conférence'], ['soccer/por.1', 'Liga Portugal'], ['soccer/ned.1', 'Eredivisie'], ['soccer/bel.1', 'Pro League (Belgique)'],
+        ['soccer/eng.2', 'Championship'], ['soccer/fra.coupe_de_france', 'Coupe de France'], ['soccer/eng.fa', 'FA Cup'], ['soccer/uefa.nations', 'Ligue des nations'],
+        ['soccer/fifa.world', 'Coupe du monde'], ['soccer/fifa.worldq.uefa', 'Qualifications Coupe du monde (Europe)'], ['soccer/uefa.euro', 'Euro'],
+        ['soccer/usa.1', 'MLS'], ['soccer/bra.1', 'Brasileirão'], ['soccer/arg.1', 'Liga argentine'], ['soccer/ksa.1', 'Saudi Pro League']],
+        markets: ['1N2', 'Double chance', 'Les deux équipes marquent', 'Plus/moins de buts', 'Score exact', 'Handicap', 'Buteur'] },
+      { id: 'basketball', label: 'Basket', icon: 'basket', unit: 'points', comps: [['basketball/nba', 'NBA'], ['basketball/wnba', 'WNBA'], ['basketball/mens-college-basketball', 'NCAA']],
+        markets: ['Vainqueur', 'Handicap', 'Total de points', 'Meilleur marqueur'] },
+      { id: 'tennis', label: 'Tennis', icon: 'tennis', unit: 'sets', solo: true, comps: [['tennis/atp', 'ATP'], ['tennis/wta', 'WTA']],
+        markets: ['Vainqueur', 'Nombre de sets', 'Handicap de jeux', 'Total de jeux'] },
+      { id: 'rugby', label: 'Rugby', icon: 'rugby', draw: true, unit: 'points', comps: [['rugby/270559', 'Top 14'], ['rugby/180659', 'Six Nations'], ['rugby/271937', 'Champions Cup'],
+        ['rugby/267979', 'Premiership'], ['rugby/270557', 'United Rugby Championship'], ['rugby/244293', 'Rugby Championship']],
+        markets: ['1N2', 'Handicap', 'Total de points', 'Marqueur d’essai'] },
+      { id: 'hockey', label: 'Hockey', icon: 'hockey', unit: 'buts', comps: [['hockey/nhl', 'NHL']], markets: ['Vainqueur', 'Total de buts', 'Handicap'] },
+      { id: 'nfl', label: 'Football US', icon: 'nfl', unit: 'points', comps: [['football/nfl', 'NFL'], ['football/college-football', 'NCAA']], markets: ['Vainqueur', 'Handicap', 'Total de points'] },
+      { id: 'baseball', label: 'Baseball', icon: 'baseball', unit: 'points', comps: [['baseball/mlb', 'MLB']], markets: ['Vainqueur', 'Handicap', 'Total de points'] },
+      { id: 'mma', label: 'MMA / UFC', icon: 'mma', solo: true, comps: [['mma/ufc', 'UFC']], markets: ['Vainqueur', 'Méthode de victoire', 'Fin avant la limite'] },
+      { id: 'f1', label: 'Formule 1', icon: 'f1', field: true, comps: [['racing/f1', 'Formule 1']], markets: ['Vainqueur', 'Podium', 'Pole position', 'Duel entre pilotes'] },
+      { id: 'esport', label: 'Esport', icon: 'esport', ai: true, unit: 'cartes', comps: [['League of Legends', 'League of Legends'], ['Counter-Strike 2', 'Counter-Strike 2'], ['Valorant', 'Valorant'],
+        ['Dota 2', 'Dota 2'], ['Rocket League', 'Rocket League'], ['EA Sports FC', 'EA Sports FC']],
+        markets: ['Vainqueur', 'Handicap de cartes', 'Score exact (cartes)', 'Total de cartes'] },
+    ];
+    const WHEN = [['0', 'Aujourd’hui'], ['1', 'Demain'], ['3', '3 jours'], ['7', '7 jours']];
+    const RISK = [['prudent', 'Prudent'], ['equilibre', 'Équilibré'], ['audacieux', 'Audacieux']];
+    let sport = SPORTS[0];
+
+    function one(box, list, val, cb) {
+      const el = $(box);
+      el.innerHTML = '';
+      list.forEach(([id, label, icon]) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.dataset.id = id;
+        b.innerHTML = (icon ? svg(icon) : '') + esc(label);
+        if (id === val) b.classList.add('on');
+        b.onclick = () => { el.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); if (cb) cb(id); };
+        el.appendChild(b);
+      });
+    }
+    const val = (box) => { const b = $(box).querySelector('button.on'); return b ? b.dataset.id : ''; };
+    function setSport(id) {
+      sport = SPORTS.find((s) => s.id === id) || SPORTS[0];
+      $('comp').innerHTML = sport.comps.map(([v, l]) => '<option value="' + esc(v) + '">' + esc(l) + '</option>').join('') + (sport.ai ? '' : '');
+      const mk = $('markets');
+      mk.innerHTML = '';
+      sport.markets.forEach((m, i) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.dataset.id = m; b.textContent = m;
+        if (i < 3) b.classList.add('on');
+        b.onclick = () => b.classList.toggle('on');
+        mk.appendChild(b);
+      });
+      $('who').placeholder = sport.ai ? 'Optionnel : équipe, tournoi (LEC, Major…) ou match' : sport.solo ? 'Optionnel : joueur ou affiche' : sport.field ? 'Optionnel : pilote' : 'Optionnel : équipe ou match (PSG, Real - Barça…)';
+      C.save('pronoSport', sport.id);
+    }
+    one('sports', SPORTS.map((s) => [s.id, s.label, s.icon]), '', setSport);
+    one('when', WHEN, '3');
+    one('risk', RISK, 'equilibre');
+    const startSport = C.load ? C.load('pronoSport') : '';
+    { const s0 = SPORTS.find((s) => s.id === startSport) ? startSport : 'soccer'; $('sports').querySelector('[data-id="' + s0 + '"]').classList.add('on'); setSport(s0); }
+
+    // ------------------------------------------------------------ IA (sessions cachées, en parallèle)
+    const aiWait = {};
+    window.__corrtexShopAI = (req, text, done, error) => {
+      const w = aiWait[req];
+      if (!w) return;
+      if (text) w.text = text;
+      if (w.onText && text) w.onText(text);
+      if (done || error) {
+        clearTimeout(w.timer);
+        delete aiWait[req];
+        if (w.text) w.resolve(w.text); else w.reject('pas de réponse de l’IA');
+      }
+    };
+    function ask(prompt, slot, ms, onText) {
+      return new Promise((resolve, reject) => {
+        const req = 'pb' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        aiWait[req] = { resolve, reject, text: '', onText, timer: setTimeout(() => { delete aiWait[req]; reject('délai dépassé'); }, ms || 150000) };
+        invoke('shop_ask_ai', { prompt, req, slot }).catch((e) => { delete aiWait[req]; reject(String(e)); });
+      });
+    }
+    function json(t) {
+      t = String(t || '').replace(/```(?:json)?/g, '');
+      const i = t.indexOf('{'), j = t.lastIndexOf('}');
+      if (i < 0 || j < i) return null;
+      try { return JSON.parse(t.slice(i, j + 1)); } catch (e) {
+        try { return JSON.parse(t.slice(i, j + 1).replace(/,\s*([}\]])/g, '$1')); } catch (e2) { return null; }
+      }
+    }
+    invoke('shop_ai_warm', { slots: [1, 2, 3] }).catch(() => {});
+    // file de tâches répartie sur les sessions 1 à 4 : chacune enchaîne ses tâches, toutes en même temps
+    async function pool(tasks, slots) {
+      let i = 0;
+      await Promise.all(slots.map(async (s) => { while (i < tasks.length) { const t = tasks[i++]; try { await t(s); } catch (e) {} } }));
+    }
+
+    // ------------------------------------------------------------ progression
+    let steps = [];
+    function step(t, s) { steps.push({ t, s: s || 'run' }); drawSteps(); return steps.length - 1; }
+    function setStep(i, s, t) { if (steps[i]) { steps[i].s = s; if (t) steps[i].t = t; drawSteps(); } }
+    function drawSteps() { $('steps').innerHTML = steps.map((x) => '<li class="' + x.s + '">' + esc(x.t) + '</li>').join(''); $('progress').classList.toggle('on', steps.length > 0); }
+
+    // ------------------------------------------------------------ données ESPN
+    async function espn(path) { return JSON.parse(await invoke('search_fetch', { source: 'espn', q: path, page: 1, form: null })); }
+    const pad = (n) => String(n).padStart(2, '0');
+    const ymd = (d) => d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate());
+    function range(days) {
+      const a = new Date(), b = new Date();
+      if (days === 1) a.setDate(a.getDate() + 1);
+      b.setDate(b.getDate() + Math.max(days, 0));
+      const end = new Date(b); end.setHours(23, 59, 59);
+      const start = new Date(a); start.setHours(0, 0, 0);
+      if (days !== 1) start.setTime(Date.now() - 3 * 3600e3); // matchs en cours compris
+      return { q: ymd(a) + '-' + ymd(b), start, end };
+    }
+    function decOdds(ml) {
+      if (ml == null || ml === '') return null;
+      const s = String(ml).trim();
+      if (/^EVEN$/i.test(s)) return 2;
+      const n = parseFloat(s.replace('+', ''));
+      if (isNaN(n) || n === 0) return null;
+      if (Math.abs(n) < 30 && n > 1) return n; // déjà décimale
+      return n > 0 ? 1 + n / 100 : 1 + 100 / Math.abs(n);
+    }
+    function oddsOf(list) {
+      const o = Array.isArray(list) ? list[0] : list;
+      if (!o) return null;
+      const ml = (k) => (o[k + 'TeamOdds'] && (o[k + 'TeamOdds'].moneyLine != null ? o[k + 'TeamOdds'].moneyLine : o[k + 'TeamOdds'].odds)) ??
+        (o.moneyline && o.moneyline[k] && ((o.moneyline[k].close || {}).odds ?? (o.moneyline[k].open || {}).odds));
+      const draw = (o.drawOdds && (o.drawOdds.moneyLine ?? o.drawOdds.odds)) ?? (o.moneyline && o.moneyline.draw && ((o.moneyline.draw.close || {}).odds ?? (o.moneyline.draw.open || {}).odds));
+      const r = { home: decOdds(ml('home')), away: decOdds(ml('away')), draw: decOdds(draw), details: o.details || '', ou: num(o.overUnder), provider: (o.provider && o.provider.name) || '' };
+      return r.home || r.away || r.details || r.ou ? r : null;
+    }
+    function side(x) {
+      const t = x.team || {}, a = x.athlete || {};
+      return {
+        id: String(x.id || t.id || a.id || ''), name: t.displayName || a.displayName || t.name || x.name || '?', short: t.abbreviation || t.shortDisplayName || '',
+        logo: t.logo || (t.logos && t.logos[0] && t.logos[0].href) || (a.flag && a.flag.href) || (a.headshot && a.headshot.href) || '',
+        form: typeof x.form === 'string' ? x.form : '', record: ((x.records || [])[0] || {}).summary || '', rank: x.curatedRank && x.curatedRank.current < 99 ? x.curatedRank.current : null,
+      };
+    }
+    function extract(j, path, label, win) {
+      const out = [];
+      const league = ((j.leagues || [])[0] || {}).name || label;
+      for (const ev of j.events || []) {
+        const comps = [].concat(ev.competitions || [], ...((ev.groupings || []).map((g) => g.competitions || [])));
+        for (const c of comps) {
+          const st = ((c.status || ev.status || {}).type || {});
+          if (st.state === 'post' || st.completed) continue;
+          const date = c.date || c.startDate || ev.date;
+          const t = date ? new Date(date) : null;
+          if (t && win && (t < win.start || t > win.end)) continue;
+          const cs = c.competitors || [];
+          const base = { ev: String(ev.id), path, comp: league, date, live: st.state === 'in', status: st.shortDetail || '', venue: (c.venue || ev.venue || {}).fullName || '' };
+          if (cs.length === 2) {
+            const h = cs.find((x) => x.homeAway === 'home') || cs[0], a = cs.find((x) => x !== h);
+            out.push(Object.assign(base, { id: 'e' + (c.id || ev.id), home: side(h), away: side(a), odds: oddsOf(c.odds), round: (c.round && c.round.displayName) || (c.type && c.type.text) || '' }));
+          } else if (cs.length > 2) {
+            out.push(Object.assign(base, { id: 'e' + (c.id || ev.id), field: true, name: ev.name || ev.shortName || league, session: (c.type && (c.type.text || c.type.abbreviation)) || '',
+              runners: cs.slice(0, 24).map((x) => side(x).name) }));
+          }
+        }
+      }
+      return out;
+    }
+
+    // ------------------------------------------------------------ étape 1 : les matchs
+    let list = [], picked = new Set(), cur = null;
+    $('form').addEventListener('submit', (e) => { e.preventDefault(); findMatches(); });
+    async function findMatches(autoRun) {
+      const days = +val('when') || 0, win = range(days), compV = $('comp').value, who = $('who').value.trim();
+      const compL = $('comp').selectedOptions[0] ? $('comp').selectedOptions[0].textContent : '';
+      cur = { sport, comp: compV, compL, who, win, days, markets: [...$('markets').querySelectorAll('button.on')].map((b) => b.dataset.id), risk: val('risk') || 'equilibre' };
+      list = []; picked = new Set();
+      $('go').disabled = true;
+      $('out').classList.remove('on');
+      steps = []; $('err').hidden = true;
+      const s1 = step(sport.ai ? 'Une session d’IA cherche les matchs de ' + compL + '…' : 'Récupération du calendrier (' + compL + ')…');
+      try {
+        if (sport.ai) list = await aiFixtures(cur);
+        else {
+          const paths = compV === 'top' ? TOP : [compV];
+          const res = await Promise.all(paths.map(async (p) => {
+            const label = (sport.comps.find((c) => c[0] === p) || [p, p])[1];
+            try {
+              let j = await espn(p + '/scoreboard?dates=' + win.q + '&limit=300');
+              let m = extract(j, p, label, win);
+              // tennis, MMA, F1 : le tableau du tournoi en cours, sans filtre de dates
+              if (!m.length && (sport.solo || sport.field)) { j = await espn(p + '/scoreboard'); m = extract(j, p, label, win); }
+              return m;
+            } catch (e) { return []; }
+          }));
+          list = res.flat().sort((a, b) => new Date(a.date) - new Date(b.date));
+        }
+        setStep(s1, 'ok', list.length ? list.length + ' match' + (list.length > 1 ? 's' : '') + ' trouvé' + (list.length > 1 ? 's' : '') : 'Aucun match trouvé sur cette période');
+      } catch (e) {
+        setStep(s1, 'err', 'Échec : ' + e);
+      }
+      // l'équipe ou le match demandé est présélectionné
+      if (who) {
+        const words = norm(who).split(/\s+(?:vs|v|contre|x)\s+|\s+/).filter((w) => w.length > 2);
+        const keys = norm(who).split(/\s*(?:-|–|vs\.?|contre| v )\s*/).map(norm).filter(Boolean);
+        list.forEach((m) => {
+          const names = m.field ? norm(m.name + ' ' + m.runners.join(' ')) : norm(m.home.name + ' ' + m.away.name + ' ' + m.home.short + ' ' + m.away.short);
+          const hit = keys.length > 1 ? keys.every((k) => names.includes(k) || k.split(' ').some((w) => w.length > 2 && names.includes(w))) : words.some((w) => names.includes(w));
+          if (hit) picked.add(m.id);
+        });
+      }
+      $('go').disabled = false;
+      drawFixtures();
+      if (autoRun && picked.size && picked.size <= 4) analyse();
+      else $('fx').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    async function aiFixtures(q) {
+      const d1 = q.win.start.toISOString().slice(0, 10), d2 = q.win.end.toISOString().slice(0, 10);
+      const t = await ask('Tu es un expert ' + q.compL + ' (esport). Liste les matchs professionnels de ' + q.compL + (q.who ? ' liés à « ' + q.who + ' »' : '') + ' prévus entre le ' + d1 + ' et le ' + d2 + ' (nous sommes le ' + new Date().toISOString().slice(0, 10) + ').\n' +
+        'Fais une recherche web si tu le peux (Liquipedia, sites officiels). N’invente rien : mieux vaut moins de matchs que des matchs faux.\n' +
+        'Réponds UNIQUEMENT par un objet JSON : {"matches":[{"home":"équipe 1","away":"équipe 2","date":"AAAA-MM-JJTHH:MM","event":"tournoi","format":"BO3"}]} (16 au plus, les plus importants d’abord).', 1, 120000);
+      const j = json(t);
+      return ((j && j.matches) || []).filter((m) => m.home && m.away).map((m, i) => ({
+        id: 'ai' + i, ai: true, comp: m.event || q.compL, date: m.date || '', round: m.format || '', home: { name: m.home, logo: '' }, away: { name: m.away, logo: '' },
+      }));
+    }
+    const fmtDate = (d) => { if (!d) return ''; const t = new Date(d); if (isNaN(t)) return String(d); const today = new Date(); const tom = new Date(); tom.setDate(tom.getDate() + 1);
+      const day = t.toDateString() === today.toDateString() ? 'Aujourd’hui' : t.toDateString() === tom.toDateString() ? 'Demain' : t.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+      return day + ' · ' + t.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); };
+    const logo = (s) => s.logo ? '<img src="' + esc(s.logo) + '" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'lg-ph\',textContent:\'' + esc((s.short || s.name || '?').slice(0, 3).replace(/'/g, '')) + '\'}))">' :
+      '<span class="lg-ph">' + esc((s.short || s.name || '?').slice(0, 3)) + '</span>';
+    function drawFixtures() {
+      const box = $('fx');
+      let h = '<h3>' + svg(sport.icon) + 'Choisissez les matchs à analyser<small>' + esc(cur.compL) + '</small></h3>';
+      if (!list.length) {
+        h += '<p class="empty">Aucun match à venir trouvé pour cette compétition sur cette période. Essayez une période plus longue ou une autre compétition.</p>';
+      } else {
+        const groups = {};
+        list.forEach((m) => { (groups[m.comp] = groups[m.comp] || []).push(m); });
+        for (const [g, ms] of Object.entries(groups)) {
+          h += '<div class="lg">' + esc(g) + '</div><div class="mxs">' + ms.map((m) => {
+            const o = m.odds;
+            const odds = o && (o.home || o.away) ? '<div class="oddsl">' + [o.home, sport.draw ? o.draw : null, o.away].filter((x) => x).map((x) => '<i>' + x.toFixed(2) + '</i>').join('') + '</div>' : '';
+            const teams = m.field ? '<div class="tm"><span>' + esc(m.name) + (m.session ? ' · ' + esc(m.session) : '') + '</span></div>' :
+              '<div><div class="tm">' + logo(m.home) + '<span>' + esc(m.home.name) + '</span></div><div class="tm" style="margin-top:4px">' + logo(m.away) + '<span>' + esc(m.away.name) + '</span></div></div>';
+            return '<button type="button" class="mx' + (picked.has(m.id) ? ' on' : '') + '" data-m="' + esc(m.id) + '"><span class="ck"></span>' + teams +
+              '<span class="when">' + (m.live ? '<span class="live">EN DIRECT</span>' : '<b>' + esc(fmtDate(m.date).split(' · ')[1] || '') + '</b>' + esc(fmtDate(m.date).split(' · ')[0] || '')) + (m.round ? '<br>' + esc(m.round) : '') + odds + '</span></button>';
+          }).join('') + '</div>';
+        }
+      }
+      if (cur.who && !list.some((m) => picked.has(m.id)) && !sport.field) {
+        h += '<p class="empty" style="margin-top:10px">« ' + esc(cur.who) + ' » n’est pas dans le calendrier trouvé. <button class="pill" type="button" data-act="free" style="height:32px">Analyser ce match quand même</button></p>';
+      }
+      h += '<div class="fxbar glass"><span id="fx-n"></span>' + (list.length ? '<button type="button" class="pill" data-act="all">Tout sélectionner</button>' : '') + '<button type="button" class="btn" data-act="run" id="run" style="height:42px">' + svg('star') + 'Analyser</button></div>';
+      box.innerHTML = h;
+      box.classList.add('on');
+      countSel();
+    }
+    function countSel() {
+      const n = picked.size;
+      if ($('fx-n')) $('fx-n').textContent = n ? n + ' match' + (n > 1 ? 's' : '') + ' sélectionné' + (n > 1 ? 's' : '') + (n > 12 ? ' (12 au plus seront analysés)' : '') : 'Sélectionnez un ou plusieurs matchs';
+      if ($('run')) $('run').disabled = !n;
+    }
+    $('fx').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-m]');
+      if (b) { const id = b.dataset.m; picked.has(id) ? picked.delete(id) : picked.add(id); b.classList.toggle('on', picked.has(id)); countSel(); return; }
+      const a = e.target.closest('[data-act]');
+      if (!a) return;
+      if (a.dataset.act === 'all') { const all = picked.size < list.length; list.forEach((m) => all ? picked.add(m.id) : picked.delete(m.id)); drawFixtures(); }
+      else if (a.dataset.act === 'run') analyse();
+      else if (a.dataset.act === 'free') freeMatch();
+    });
+    // match tapé à la main (absent du calendrier ou sport sans données) : analyse par l'IA et les actualités
+    function freeMatch() {
+      const parts = cur.who.split(/\s*(?:-|–|—|\bvs\.?\b|\bcontre\b|\bv\b|\bx\b)\s*/i).filter(Boolean);
+      const m = { id: 'f' + Date.now(), ai: true, comp: cur.compL, date: '', home: { name: parts[0] || cur.who, logo: '' }, away: { name: parts[1] || '?', logo: '' } };
+      list.unshift(m);
+      picked = new Set([m.id]);
+      drawFixtures();
+      analyse();
+    }
+
+    // ------------------------------------------------------------ étape 2 : données de chaque match
+    function sameTeam(t, s) {
+      if (!t || !s) return false;
+      if (t.id != null && s.id && String(t.id) === String(s.id)) return true;
+      const a = norm(t.displayName || t.name || t), b = norm(s.name);
+      return !!a && !!b && (a === b || a.includes(b) || b.includes(a));
+    }
+    const RES = { W: 'W', V: 'W', L: 'L', D: 'D', T: 'D', N: 'D' };
+    async function teamForm(path, id) {
+      try {
+        const j = await espn(path + '/teams/' + id + '/schedule');
+        const done = (j.events || []).filter((e) => (((e.competitions || [])[0] || {}).status || {}).type && e.competitions[0].status.type.completed);
+        return done.slice(-6).reverse().map((e) => {
+          const c = e.competitions[0], me = (c.competitors || []).find((x) => String(x.id || (x.team || {}).id) === String(id)) || {}, op = (c.competitors || []).find((x) => x !== me) || {};
+          const sc = (x) => x.score == null ? '' : typeof x.score === 'object' ? (x.score.displayValue ?? x.score.value) : x.score;
+          const r = me.winner ? 'W' : op.winner ? 'L' : 'D';
+          return { r, score: sc(me) + '-' + sc(op), opp: (op.team || {}).displayName || '', at: me.homeAway === 'home' ? 'vs' : '@', date: e.date };
+        });
+      } catch (e) { return []; }
+    }
+    async function gather(m) {
+      const d = { form: { home: [], away: [] }, h2h: [], table: {}, inj: { home: [], away: [] }, proj: null, odds: m.odds || null, news: [] };
+      const jobs = [];
+      if (m.path && !m.field) {
+        jobs.push(espn(m.path + '/summary?event=' + m.ev).then((s) => {
+          for (const f of ((s.boxscore || {}).form || s.lastFiveGames || [])) {
+            const k = sameTeam(f.team, m.home) ? 'home' : sameTeam(f.team, m.away) ? 'away' : null;
+            if (!k) continue;
+            d.form[k] = (f.events || []).slice(0, 6).map((e) => ({ r: RES[String(e.gameResult || '').toUpperCase()] || '', score: e.score || '', opp: (e.opponent || {}).displayName || (e.opponent || {}).abbreviation || '', at: e.atVs || '', date: e.gameDate }));
+          }
+          const hh = (s.headToHeadGames || [])[0];
+          if (hh) d.h2h = (hh.events || []).slice(0, 6).map((e) => {
+            const tn = (hh.team || {}).displayName || (sameTeam(hh.team, m.home) ? m.home.name : m.away.name), on = (e.opponent || {}).displayName || '?';
+            const homeIsTeam = e.homeTeamId != null ? String(e.homeTeamId) === String((hh.team || {}).id) : e.atVs !== '@';
+            const hs = e.homeTeamScore ?? '', as = e.awayTeamScore ?? '';
+            return { date: e.gameDate, txt: hs !== '' ? (homeIsTeam ? tn + ' ' + hs + '-' + as + ' ' + on : on + ' ' + hs + '-' + as + ' ' + tn) : (homeIsTeam ? tn + ' ' + (e.score || '') + ' ' + on : on + ' ' + (e.score || '') + ' ' + tn) };
+          });
+          const entries = [];
+          const walk = (g) => { if (!g) return; if (g.standings && g.standings.entries) entries.push(...g.standings.entries); (g.groups || g.children || []).forEach(walk); };
+          walk(s.standings);
+          for (const k of ['home', 'away']) {
+            const e = entries.find((x) => sameTeam(typeof x.team === 'string' ? { displayName: x.team, id: x.id } : Object.assign({ id: x.id }, x.team), m[k]));
+            if (!e) continue;
+            const st = {};
+            (e.stats || []).forEach((x) => { st[x.name || x.type] = x.displayValue ?? x.value; });
+            d.table[k] = { rank: st.rank, pts: st.points, gp: st.gamesPlayed, w: st.wins, dr: st.ties, l: st.losses, diff: st.pointDifferential ?? st.differential, gf: st.pointsFor, ga: st.pointsAgainst, pct: st.winPercent, overall: st.overall };
+          }
+          for (const t of s.injuries || []) {
+            const k = sameTeam(t.team, m.home) ? 'home' : sameTeam(t.team, m.away) ? 'away' : null;
+            if (k) d.inj[k] = (t.injuries || []).slice(0, 8).map((x) => ((x.athlete || {}).displayName || '?') + ' (' + (x.status || (x.type || {}).description || 'incertain') + ')');
+          }
+          const p = s.predictor;
+          if (p && (p.homeTeam || p.awayTeam)) d.proj = { home: num((p.homeTeam || {}).gameProjection), away: num((p.awayTeam || {}).gameProjection) };
+          if (!d.odds) d.odds = oddsOf(s.pickcenter) || oddsOf(s.odds);
+        }).catch(() => {}));
+      }
+      const nq = m.field ? m.name : m.home.name + ' ' + m.away.name;
+      jobs.push(invoke('search_fetch', { source: 'news', q: nq, page: 1, form: null }).then((t) => {
+        d.news = (JSON.parse(t).results || []).slice(0, 6).map((x) => ({ t: x.title || '', x: String(x.excerpt || '').replace(/<[^>]+>/g, '').slice(0, 150), date: x.date ? new Date(x.date * 1000) : null, src: x.source || '' }));
+      }).catch(() => {}));
+      await Promise.all(jobs);
+      // forme manquante : le calendrier de l'équipe
+      if (m.path && !m.field) {
+        const fill = [];
+        for (const k of ['home', 'away']) if (!d.form[k].length && m[k].id) fill.push(teamForm(m.path, m[k].id).then((f) => { d.form[k] = f; }));
+        await Promise.all(fill);
+      }
+      m.data = d;
+      return d;
+    }
+    const dd = (x) => { if (!x) return ''; const t = new Date(x); return isNaN(t) ? '' : t.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }); };
+    const RL = { W: 'V', D: 'N', L: 'D' };
+    function digest(m) {
+      const d = m.data || {}, L = [];
+      if (m.field) {
+        L.push('### Épreuve id=' + m.id + ' : ' + m.name + (m.session ? ' (' + m.session + ')' : '') + ' — ' + m.comp + ', ' + fmtDate(m.date));
+        L.push('Engagés : ' + m.runners.join(', '));
+      } else {
+        L.push('### Match id=' + m.id + ' : ' + m.home.name + (sport.solo ? '' : ' (domicile)') + ' contre ' + m.away.name + ' — ' + m.comp + (m.round ? ', ' + m.round : '') + (m.date ? ', ' + fmtDate(m.date) : '') + (m.venue ? ', ' + m.venue : '') + (m.live ? ' [EN COURS : ' + m.status + ']' : ''));
+        const tb = (k) => { const t = (d.table || {})[k]; if (!t) return ''; return m[k].name + ' ' + [t.rank ? ord(t.rank) : '', t.pts != null ? t.pts + ' pts' : '', t.gp ? t.gp + ' j.' : '', t.w != null ? t.w + 'V ' + (t.dr != null ? t.dr + 'N ' : '') + t.l + 'D' : t.overall || '', t.gf != null ? 'pour ' + t.gf + ' / contre ' + t.ga : '', t.diff != null ? 'diff ' + t.diff : ''].filter(Boolean).join(', '); };
+        const t1 = tb('home'), t2 = tb('away');
+        if (t1 || t2) L.push('Classement : ' + [t1, t2].filter(Boolean).join(' | '));
+        else if (m.home.record || m.away.record) L.push('Bilan : ' + m.home.name + ' ' + m.home.record + ' | ' + m.away.name + ' ' + m.away.record);
+        for (const k of ['home', 'away']) {
+          const f = (d.form || {})[k] || [];
+          if (f.length) L.push('Forme ' + m[k].name + ' (plus récent d’abord) : ' + f.map((x) => (RL[x.r] || '?') + ' ' + x.score + ' ' + (x.at === '@' ? 'à' : 'contre') + ' ' + x.opp + (x.date ? ' (' + dd(x.date) + ')' : '')).join(' ; '));
+          else if (m[k].form) L.push('Forme ' + m[k].name + ' : ' + m[k].form.split('').map((c) => RL[c] || c).join(''));
+        }
+        if (d.h2h && d.h2h.length) L.push('Face-à-face récents : ' + d.h2h.map((x) => (x.date ? dd(x.date) + ' ' : '') + x.txt).join(' ; '));
+        if ((d.inj || {}).home && (d.inj.home.length || d.inj.away.length)) L.push('Absences : ' + m.home.name + ' : ' + (d.inj.home.join(', ') || 'aucune connue') + ' | ' + m.away.name + ' : ' + (d.inj.away.join(', ') || 'aucune connue'));
+        if (d.proj && (d.proj.home || d.proj.away)) L.push('Projection ESPN : ' + m.home.name + ' ' + d.proj.home + ' % / ' + m.away.name + ' ' + d.proj.away + ' %');
+        const o = d.odds;
+        if (o && (o.home || o.away || o.details)) L.push('Cotes' + (o.provider ? ' (' + o.provider + ')' : '') + ' : ' + [o.home ? '1 = ' + o.home.toFixed(2) : '', o.draw ? 'N = ' + o.draw.toFixed(2) : '', o.away ? '2 = ' + o.away.toFixed(2) : '', o.details ? 'ligne ' + o.details : '', o.ou ? 'total ' + o.ou : ''].filter(Boolean).join(' · '));
+      }
+      if (d.news && d.news.length) L.push('Actualités :\n' + d.news.map((x) => '- ' + (x.date ? dd(x.date) + ' ' : '') + x.t + (x.x ? ' — ' + x.x : '')).join('\n'));
+      if (L.length === 1) L.push('(aucune donnée chiffrée : appuie-toi sur tes connaissances et une recherche web)');
+      return L.join('\n').slice(0, 2600);
+    }
+
+    // ------------------------------------------------------------ étape 3 : trois analystes en parallèle
+    const ROLES = [
+      { k: 'stats', n: 'Statisticien', d: 'statisticien sportif (modèles type Elo et Poisson). Pars des chiffres : forme sur les 5 à 6 derniers matchs, buts ou points marqués et encaissés, domicile ou extérieur, classement et écart de niveau, pour estimer les probabilités et le score le plus probable.' },
+      { k: 'terrain', n: 'Analyste terrain', d: 'analyste terrain. Concentre-toi sur les absences et blessures, la fatigue et le calendrier (matchs rapprochés, déplacements), les enjeux et la motivation, la dynamique, les styles de jeu et les confrontations directes ; fais une recherche web sur les dernières nouvelles (compositions probables, blessés) si tu le peux.' },
+      { k: 'marche', n: 'Parieur pro', d: 'parieur professionnel. Estime tes propres probabilités, compare-les aux cotes du marché quand elles sont fournies, cherche les paris à valeur (probabilité × cote > 1) et adapte le risque au profil demandé.' },
+    ];
+    const RISK_TXT = { prudent: 'prudent : privilégier les paris très probables (plus de 60 %), même à petite cote', equilibre: 'équilibré : bon compromis entre probabilité (50 % et +) et cote', audacieux: 'audacieux : accepter des paris moins probables (35 à 55 %) s’ils ont une vraie valeur' };
+    function prompt(role, ms) {
+      const today = new Date().toISOString().slice(0, 10);
+      const field = ms.some((m) => m.field);
+      return 'Tu es un ' + role.d + '\nNous sommes le ' + today + '. Sport : ' + sport.label + '.\n' +
+        'Analyse ' + (ms.length > 1 ? 'ces ' + ms.length + ' rencontres' : 'cette rencontre') + ' comme un vrai pronostiqueur, à partir des DONNÉES ci-dessous et de tes connaissances (effectifs, niveau, historique). ' +
+        'Probabilités calibrées et honnêtes : pas de certitude, l’incertitude fait partie du pronostic.\n' +
+        'Types de paris voulus : ' + (cur.markets.join(', ') || 'les plus pertinents') + '. Profil du parieur : ' + RISK_TXT[cur.risk] + '.\n\n' +
+        'Réponds UNIQUEMENT par un objet JSON valide, sans texte autour :\n' +
+        '{"matches":[{"id":"l’id donné","p_home":0.00,"p_draw":0.00,"p_away":0.00,"score":"' + (sport.solo ? '2-1 (en sets)' : '2-1') + '","confidence":0-100,' +
+        '"picks":[{"market":"type de pari","pick":"pari précis et court (ex. Victoire PSG, Plus de 2,5 buts)","prob":0.00}],' +
+        '"key":["3 à 4 facteurs décisifs, courts et concrets"],"summary":"2 phrases d’analyse"' + (field ? ',"ranking":[{"name":"pilote","prob":0.00}]' : '') + '}]}\n' +
+        'Règles : p_home = victoire de ' + (sport.solo ? 'du premier nommé' : 'l’équipe à domicile') + ', p_away = victoire de l’autre' + (sport.draw ? ', p_draw = match nul' : ', p_draw = 0') +
+        ' ; somme = 1 ; 3 à 5 paris par match, du plus sûr au plus risqué ; « prob » = ta probabilité réelle pour ce pari' + (field ? ' ; pour une course : « ranking » = 6 favoris avec leur probabilité de victoire, et p_home/p_draw/p_away à 0' : '') + '.\n\n' +
+        'DONNÉES :\n' + ms.map(digest).join('\n\n');
+    }
+    let run = null;
+    async function analyse() {
+      const ms = list.filter((m) => picked.has(m.id)).slice(0, 12);
+      if (!ms.length) return;
+      const r0 = { id: Date.now(), ms, at: Date.now() };
+      run = r0;
+      ms.forEach((m) => { m.votes = {}; m.state = {}; });
+      steps = []; $('err').hidden = true;
+      $('out').innerHTML = ''; $('out').classList.add('on');
+      drawBoard();
+      $('progress').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const sD = step('Collecte des données : forme, classement, face-à-face, absences, cotes, actualités…');
+      await Promise.all(ms.map((m) => gather(m).catch(() => {})));
+      if (run !== r0) return;
+      setStep(sD, 'ok', 'Données réunies pour ' + ms.length + ' match' + (ms.length > 1 ? 's' : ''));
+      drawBoard();
+      // matchs groupés par 3 (la question reste courte) ; chaque groupe est vu par les trois analystes
+      const groups = [];
+      for (let i = 0; i < ms.length; i += 3) groups.push(ms.slice(i, i + 3));
+      const total = groups.length * ROLES.length;
+      let done = 0;
+      const sA = step('3 sessions d’IA analysent en parallèle (statistiques, terrain, marché)…');
+      const tasks = [];
+      for (const role of ROLES) for (const g of groups) tasks.push(async (slot) => {
+        if (run !== r0) return;
+        g.forEach((m) => { m.state[role.k] = 'run'; });
+        drawBoard();
+        try {
+          const t = await ask(prompt(role, g), slot, 170000);
+          const j = json(t);
+          const items = (j && (j.matches || (Array.isArray(j) ? j : null))) || [];
+          g.forEach((m, i) => {
+            const it = items.find((x) => String(x.id) === m.id) || items.find((x) => x.id && m.id.endsWith(String(x.id))) || items[i];
+            if (it) { m.votes[role.k] = it; m.state[role.k] = 'ok'; } else m.state[role.k] = 'ko';
+          });
+        } catch (e) {
+          g.forEach((m) => { m.state[role.k] = 'ko'; });
+        }
+        done++;
+        if (run !== r0) return;
+        setStep(sA, done === total ? 'ok' : 'run', done === total ? 'Analyse terminée : avis de ' + ROLES.length + ' sessions croisés' : 'Analyses reçues : ' + done + ' sur ' + total + '…');
+        drawBoard();
+      });
+      await pool(tasks, [1, 2, 3, 4].slice(0, Math.min(4, Math.max(3, total))));
+      if (run !== r0) return;
+      if (!ms.some((m) => Object.keys(m.votes).length)) {
+        setStep(sA, 'err', 'Aucune session d’IA n’a répondu');
+        $('err').hidden = false;
+        $('err').innerHTML = '<button class="pill" id="retry">Réessayer</button><span style="font-size:13px;color:var(--fg-dim)">Vérifiez dans le panneau IA que vous êtes connecté à Claude, ChatGPT ou Gemini.</span>';
+        $('retry').onclick = analyse;
+      }
+      drawBoard();
+    }
+
+    // ------------------------------------------------------------ consensus
+    const p01 = (x) => { const n = num(x); if (n == null) return null; return n > 1 ? n / 100 : Math.max(0, n); };
+    function consensus(m) {
+      const vs = ROLES.map((r) => m.votes[r.k]).filter(Boolean);
+      if (!vs.length) return null;
+      let h = 0, d = 0, a = 0, n = 0;
+      vs.forEach((v) => { const x = p01(v.p_home) || 0, y = sport.draw ? p01(v.p_draw) || 0 : 0, z = p01(v.p_away) || 0; const s = x + y + z; if (s > 0) { h += x / s; d += y / s; a += z / s; n++; } });
+      const P = n ? { home: h / n, draw: d / n, away: a / n } : null;
+      const arg = (v) => { const x = p01(v.p_home) || 0, y = sport.draw ? p01(v.p_draw) || 0 : 0, z = p01(v.p_away) || 0; return x >= y && x >= z ? 'home' : z >= y ? 'away' : 'draw'; };
+      const fav = P ? (P.home >= P.draw && P.home >= P.away ? 'home' : P.away >= P.draw ? 'away' : 'draw') : null;
+      const agree = vs.filter((v) => arg(v) === fav).length;
+      const scores = {};
+      vs.forEach((v) => { const s = String(v.score || '').match(/\d+\s*[-–:]\s*\d+/); if (s) { const k = s[0].replace(/\s/g, '').replace(/[–:]/, '-'); scores[k] = (scores[k] || 0) + 1; } });
+      const score = Object.entries(scores).sort((x, y) => y[1] - x[1])[0];
+      const conf = vs.reduce((s, v) => s + (num(v.confidence) || 50), 0) / vs.length;
+      // paris : regroupés quand plusieurs sessions proposent le même
+      const map = {};
+      vs.forEach((v) => (v.picks || []).forEach((p) => {
+        const prob = p01(p.prob);
+        if (!p.pick || prob == null) return;
+        const k = norm(p.pick).replace(/\b(victoire|de|du|la|le|les|l)\b/g, '').replace(/\s+/g, ' ').trim();
+        (map[k] = map[k] || { market: p.market || '', pick: p.pick, probs: [] }).probs.push(prob);
+      }));
+      const picks = Object.values(map).map((x) => ({ market: x.market, pick: x.pick, prob: x.probs.reduce((s, y) => s + y, 0) / x.probs.length, votes: x.probs.length }))
+        .sort((x, y) => (y.prob * (1 + .12 * (y.votes - 1))) - (x.prob * (1 + .12 * (x.votes - 1))));
+      const o = (m.data || {}).odds;
+      const marketOdd = (pk) => {
+        if (!o) return null;
+        const t = norm(pk.pick), mk = norm(pk.market);
+        if (!/1n2|vainqueur|victoire|gagn|nul|draw/.test(mk + ' ' + t)) return null;
+        if (/\bnul\b|draw/.test(t)) return o.draw;
+        if (sameTeam({ displayName: t.replace(/victoire|gagne|vainqueur/g, '').trim() }, m.home) || (m.home.short && t.includes(norm(m.home.short)))) return o.home;
+        if (sameTeam({ displayName: t.replace(/victoire|gagne|vainqueur/g, '').trim() }, m.away) || (m.away.short && t.includes(norm(m.away.short)))) return o.away;
+        return null;
+      };
+      picks.forEach((p) => { p.odd = marketOdd(p); p.value = p.odd ? p.prob * p.odd - 1 : null; });
+      const th = cur.risk === 'prudent' ? .62 : cur.risk === 'audacieux' ? .35 : .5;
+      let best;
+      if (cur.risk === 'audacieux') best = picks.filter((p) => p.prob >= .33 && p.prob <= .6).sort((x, y) => ((y.value ?? 0) - (x.value ?? 0)) || (y.votes - x.votes) || (y.prob - x.prob))[0];
+      else if (cur.risk === 'equilibre') best = picks.filter((p) => p.prob >= th && p.prob <= .82).sort((x, y) => ((y.value ?? -1) > 0) - ((x.value ?? -1) > 0) || (y.votes - x.votes) || (y.prob - x.prob))[0];
+      best = best || picks.filter((p) => p.prob >= th)[0] || picks[0] || null;
+      const keys = [], seen = new Set();
+      vs.forEach((v) => (v.key || []).forEach((k) => { const s = norm(k).slice(0, 28); if (k && !seen.has(s) && keys.length < 6) { seen.add(s); keys.push(k); } }));
+      // course : classement moyen des favoris
+      let ranking = null;
+      if (m.field) {
+        const rk = {};
+        vs.forEach((v) => (v.ranking || []).forEach((x) => { const p = p01(x.prob); if (x.name && p != null) { const k = norm(x.name); (rk[k] = rk[k] || { name: x.name, s: 0 }).s += p; } }));
+        ranking = Object.values(rk).map((x) => ({ name: x.name, prob: x.s / vs.length })).sort((x, y) => y.prob - x.prob).slice(0, 6);
+      }
+      const confAdj = Math.round(Math.min(95, conf * (.7 + .3 * (agree / vs.length))));
+      return { P, fav, agree, n: vs.length, score: score ? score[0] : '', conf: confAdj, picks, best, keys, ranking, summary: (m.votes.stats || vs[0]).summary || '' };
+    }
+
+    // ------------------------------------------------------------ affichage
+    const favName = (m, f) => f === 'home' ? m.home.name : f === 'away' ? m.away.name : 'Match nul';
+    function fchips(f, s) {
+      const list2 = f && f.length ? f.map((x) => x.r) : String(s || '').split('').map((c) => RES[c] || '');
+      return list2.filter(Boolean).slice(0, 5).map((r) => '<i class="' + r + '">' + RL[r] + '</i>').join('');
+    }
+    function card(m) {
+      const k = consensus(m), d = m.data || {};
+      const sess = '<span class="sess" title="Sessions d’IA : statistiques, terrain, marché">' + ROLES.map((r) => '<i class="' + (m.state[r.k] || '') + '" title="' + r.n + '"></i>').join('') + '</span>';
+      let h = '<article class="pm glass" data-card="' + esc(m.id) + '"><div class="cmp">' + svg(sport.icon).replace('<svg', '<svg style="width:15px;height:15px"') + esc([m.comp, m.round, m.live ? 'en cours' : fmtDate(m.date)].filter(Boolean).join(' · ')) + sess + '</div>';
+      if (m.field) {
+        h += '<div class="vs" style="grid-template-columns:1fr"><div class="t" style="font-size:18px">' + esc(m.name) + (m.session ? '<small>' + esc(m.session) + '</small>' : '') + '</div></div>';
+      } else {
+        h += '<div class="vs"><div class="t">' + logo(m.home) + esc(m.home.name) + '<div class="fchips">' + fchips((d.form || {}).home, m.home.form) + '</div>' + (d.table && d.table.home && d.table.home.rank ? '<small>' + esc(ord(d.table.home.rank)) + ' · ' + esc(d.table.home.pts ?? '') + ' pts</small>' : m.home.record ? '<small>' + esc(m.home.record) + '</small>' : '') + '</div>' +
+          '<div class="mid"><div class="sc">' + (k && k.score ? esc(k.score) : '–') + '</div><small>' + (k && k.score ? 'score probable' : 'analyse…') + '</small></div>' +
+          '<div class="t">' + logo(m.away) + esc(m.away.name) + '<div class="fchips">' + fchips((d.form || {}).away, m.away.form) + '</div>' + (d.table && d.table.away && d.table.away.rank ? '<small>' + esc(ord(d.table.away.rank)) + ' · ' + esc(d.table.away.pts ?? '') + ' pts</small>' : m.away.record ? '<small>' + esc(m.away.record) + '</small>' : '') + '</div></div>';
+      }
+      if (!k) {
+        h += '<div class="wait">' + (m.data ? 'Les sessions d’IA analysent le match…' : 'Collecte des données…') + '</div></article>';
+        return h;
+      }
+      if (k.P && !m.field) {
+        const o = d.odds, imp = o && o.home && o.away ? (() => { const a = 1 / o.home, b = o.draw ? 1 / o.draw : 0, c = 1 / o.away, s = a + b + c; return [a / s, b / s, c / s]; })() : null;
+        h += '<div><div class="pbar"><div class="h" style="flex-grow:' + k.P.home + '">' + pct(k.P.home) + '</div>' + (sport.draw ? '<div class="d" style="flex-grow:' + k.P.draw + '">' + pct(k.P.draw) + '</div>' : '') + '<div class="a" style="flex-grow:' + k.P.away + '">' + pct(k.P.away) + '</div></div>' +
+          '<div class="plab" style="margin-top:4px"><span>' + esc(m.home.short || m.home.name) + '</span>' + (sport.draw ? '<span>Nul</span>' : '') + '<span>' + esc(m.away.short || m.away.name) + '</span></div>' +
+          (imp ? '<div class="mkt" style="margin-top:4px">Marché' + (o.provider ? ' (' + esc(o.provider) + ')' : '') + ' : ' + pct(imp[0]) + (sport.draw ? ' / ' + pct(imp[1]) : '') + ' / ' + pct(imp[2]) + ' · cotes ' + [o.home, sport.draw ? o.draw : null, o.away].filter(Boolean).map((x) => x.toFixed(2)).join(' – ') + '</div>' : '') + '</div>';
+      }
+      if (k.ranking && k.ranking.length) {
+        h += '<div><h4>Favoris</h4><div class="rank">' + k.ranking.map((x) => '<div class="pk"><span>' + esc(x.name) + '</span><span class="bar"><i style="width:' + Math.round(x.prob * 100) + '%"></i></span><b>' + pct(x.prob) + '</b></div>').join('') + '</div></div>';
+      }
+      if (k.best) {
+        const b = k.best;
+        h += '<div class="best"><span class="bi">' + svg('star') + '</span><span><small>Pari conseillé · ' + esc(b.market || '') + '</small><b>' + esc(b.pick) + '</b>' + (b.value != null && b.value > .03 ? '<span class="value">VALUE +' + Math.round(b.value * 100) + ' %</span>' : '') + '</span>' +
+          '<span class="pr"><b>' + pct(b.prob) + '</b><small>cote juste ' + (1 / Math.max(.01, b.prob)).toFixed(2) + (b.odd ? ' · marché ' + b.odd.toFixed(2) : '') + '</small></span></div>';
+      }
+      h += '<div class="gauge">Confiance<span class="g"><i style="width:' + k.conf + '%"></i></span><b>' + k.conf + ' %</b><span>· ' + k.agree + '/' + k.n + ' session' + (k.n > 1 ? 's' : '') + ' d’accord</span></div>';
+      if (k.summary) h += '<p class="sum">' + esc(k.summary) + '</p>';
+      const others = k.picks.filter((p) => p !== k.best).slice(0, 5);
+      if (others.length) h += '<div><h4>Autres paris</h4><div class="picks">' + others.map((p) => '<div class="pk"><span><span class="mk">' + esc(p.market || '') + '</span>' + esc(p.pick) + (p.votes > 1 ? '<span class="v">×' + p.votes + '</span>' : '') + (p.value != null && p.value > .03 ? '<span class="value">VALUE</span>' : '') + '</span><span class="bar"><i style="width:' + Math.round(p.prob * 100) + '%"></i></span><b>' + pct(p.prob) + '</b></div>').join('') + '</div></div>';
+      if (k.keys.length) h += '<div><h4>Facteurs clés</h4><ul class="keys">' + k.keys.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
+      // données brutes et avis de chaque session
+      let dg = '';
+      if (!m.field) {
+        for (const s of ['home', 'away']) {
+          const f = (d.form || {})[s] || [];
+          if (f.length) dg += '<div><h4>Forme · ' + esc(m[s].name) + '</h4><ul>' + f.map((x) => '<li><i class="' + x.r + '">' + (RL[x.r] || '?') + '</i>' + esc(x.score + ' ' + (x.at === '@' ? 'à ' : 'contre ') + x.opp) + '</li>').join('') + '</ul></div>';
+        }
+        if (d.h2h && d.h2h.length) dg += '<div class="full"><h4>Face-à-face</h4><ul>' + d.h2h.map((x) => '<li>' + esc((x.date ? dd(x.date) + ' · ' : '') + x.txt) + '</li>').join('') + '</ul></div>';
+        if (d.inj && (d.inj.home.length || d.inj.away.length)) dg += '<div class="full"><h4>Absences</h4><ul><li>' + esc(m.home.name + ' : ' + (d.inj.home.join(', ') || '—')) + '</li><li>' + esc(m.away.name + ' : ' + (d.inj.away.join(', ') || '—')) + '</li></ul></div>';
+      }
+      if (d.news && d.news.length) dg += '<div class="full"><h4>Actualités</h4><ul>' + d.news.slice(0, 4).map((x) => '<li>' + esc((x.date ? dd(x.date) + ' · ' : '') + x.t) + '</li>').join('') + '</ul></div>';
+      const views = ROLES.filter((r) => m.votes[r.k]).map((r) => { const v = m.votes[r.k]; const p = [p01(v.p_home), sport.draw ? p01(v.p_draw) : null, p01(v.p_away)].filter((x) => x != null);
+        return '<div><b>' + r.n + (p.length && !m.field ? ' · ' + p.map(pct).join(' / ') : '') + (v.score ? ' · ' + esc(v.score) : '') + '</b>' + esc(v.summary || '') + '</div>'; }).join('');
+      h += '<details class="data"><summary>Données et avis de chaque session</summary>' + (dg ? '<div class="dg">' + dg + '</div>' : '') + (views ? '<div class="views">' + views + '</div>' : '') + '</details>';
+      const espnUrl = m.path ? 'https://www.espn.com/' + m.path.split('/')[0].replace('basketball', 'nba').replace('football', 'nfl') + '/' : '';
+      h += '<div class="acts"><button data-save="' + esc(m.id) + '">' + svg('save') + (m.saved ? 'Enregistré' : 'Enregistrer') + '</button>' +
+        '<button data-redo="' + esc(m.id) + '">' + svg('redo') + 'Relancer l’analyse</button>' +
+        '<a href="' + esc(C.searchUrl(m.field ? m.name : m.home.name + ' ' + m.away.name + ' compositions probables', 'corrtex')) + '">' + svg('ext') + 'Compos et infos</a></div>';
+      return h + '</article>';
+    }
+    function combo(ms) {
+      const th = cur.risk === 'prudent' ? .66 : cur.risk === 'audacieux' ? .5 : .58;
+      const legs = ms.map((m) => ({ m, k: consensus(m) })).filter((x) => x.k && x.k.best && x.k.best.prob >= th).sort((a, b) => b.k.best.prob - a.k.best.prob).slice(0, cur.risk === 'prudent' ? 3 : 4);
+      if (legs.length < 2) return '';
+      const p = legs.reduce((s, x) => s * x.k.best.prob, 1);
+      const mk = legs.every((x) => x.k.best.odd) ? legs.reduce((s, x) => s * x.k.best.odd, 1) : null;
+      return '<section class="combo glass"><h3>' + svg('layers') + 'Combiné suggéré</h3><ol>' + legs.map((x) => '<li><b>' + esc(x.k.best.pick) + '</b> <span style="color:var(--fg-dim)">· ' + esc(x.m.field ? x.m.name : x.m.home.name + ' – ' + x.m.away.name) + ' · ' + pct(x.k.best.prob) + '</span></li>').join('') + '</ol>' +
+        '<div class="tot"><span>Probabilité <b>' + pct(p) + '</b></span><span>Cote juste <b>' + (1 / p).toFixed(2) + '</b></span>' + (mk ? '<span>Cote du marché ≈ <b>' + mk.toFixed(2) + '</b></span>' : '') + '<span>Plus il y a de matchs, plus le risque grimpe : chaque sélection doit passer.</span></div></section>';
+    }
+    function drawBoard() {
+      if (!run) return;
+      const keep = {};
+      $('out').querySelectorAll('details.data[open]').forEach((x) => { const c = x.closest('[data-card]'); if (c) keep[c.dataset.card] = true; });
+      $('out').innerHTML = '<div class="board">' + run.ms.map(card).join('') + '</div>' + combo(run.ms);
+      Object.keys(keep).forEach((id) => { const c = $('out').querySelector('[data-card="' + CSS.escape(id) + '"] details.data'); if (c) c.open = true; });
+      $('out').classList.add('on');
+    }
+    $('out').addEventListener('click', (e) => {
+      const s = e.target.closest('[data-save]');
+      if (s) { const m = run.ms.find((x) => x.id === s.dataset.save); if (m) saveOne(m); return; }
+      const r = e.target.closest('[data-redo]');
+      if (r) { picked = new Set([r.dataset.redo]); analyse(); return; }
+      const a = e.target.closest('a[href]');
+      if (a && /^https?:/.test(a.href)) { e.preventDefault(); C.invoke('new_tab', { url: a.href }); }
+    });
+
+    // ------------------------------------------------------------ mes pronostics (et leur réussite)
+    const loadSaved = () => { try { return JSON.parse(localStorage.getItem('corrtex.bets') || '[]'); } catch (e) { return []; } };
+    const storeSaved = (l) => { try { localStorage.setItem('corrtex.bets', JSON.stringify(l.slice(0, 200))); } catch (e) {} };
+    function saveOne(m) {
+      const k = consensus(m);
+      if (!k) return;
+      const l = loadSaved().filter((x) => x.key !== m.id);
+      l.unshift({ key: m.id, at: Date.now(), sport: sport.id, comp: m.comp, date: m.date, path: m.path || '', ev: m.ev || '', field: !!m.field,
+        title: m.field ? m.name : m.home.name + ' – ' + m.away.name, fav: k.fav, favName: m.field ? (k.ranking && k.ranking[0] ? k.ranking[0].name : '') : favName(m, k.fav),
+        pick: k.best ? k.best.pick : '', prob: k.best ? k.best.prob : null, score: k.score });
+      storeSaved(l);
+      m.saved = true;
+      drawBoard();
+    }
+    // résultat réel d'un pronostic terminé (vainqueur du match) : ESPN
+    async function checkResult(x) {
+      if (x.res || !x.path || !x.ev || x.field || (x.date && new Date(x.date) > new Date(Date.now() - 2 * 3600e3))) return false;
+      try {
+        const s = await espn(x.path + '/summary?event=' + x.ev);
+        const c = ((s.header || {}).competitions || [])[0];
+        if (!c || !((c.status || {}).type || {}).completed) return false;
+        const cs = c.competitors || [], h = cs.find((y) => y.homeAway === 'home') || cs[0], a = cs.find((y) => y !== h) || {};
+        const hs = num(h.score), as = num(a.score);
+        const out = h.winner ? 'home' : a.winner ? 'away' : hs != null && as != null ? (hs > as ? 'home' : as > hs ? 'away' : 'draw') : null;
+        if (!out) return false;
+        x.res = { out, score: (h.score ?? '') + '-' + (a.score ?? '') };
+        return true;
+      } catch (e) { return false; }
+    }
+    async function drawSaved() {
+      const l = loadSaved();
+      const paint = () => {
+        const done = l.filter((x) => x.res), ok = done.filter((x) => x.res.out === x.fav).length;
+        $('saved-list').innerHTML = (done.length ? '<p class="rate">Réussite (vainqueur annoncé) : <b>' + ok + ' / ' + done.length + '</b> · ' + Math.round(ok / done.length * 100) + ' %</p>' : '') +
+          (l.length ? l.map((x) => '<div class="hv"><span>' + esc(x.title) + '<small>' + esc((x.pick || x.favName) + (x.prob ? ' · ' + pct(x.prob) : '') + ' · ' + (x.date ? fmtDate(x.date) : new Date(x.at).toLocaleDateString('fr-FR'))) + '</small></span>' +
+            '<span class="st' + (x.res ? (x.res.out === x.fav ? ' ok' : ' ko') : '') + '">' + (x.res ? (x.res.out === x.fav ? '✓ ' : '✗ ') + esc(x.res.score) : 'à venir') + '</span>' +
+            '<button class="x" data-del="' + esc(x.key) + '" title="Supprimer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>').join('') :
+            '<p class="empty">Aucun pronostic enregistré. Après une analyse, cliquez sur « Enregistrer » : Corrtex vérifiera le résultat une fois le match terminé.</p>');
+      };
+      paint();
+      const changed = await Promise.all(l.slice(0, 40).map(checkResult));
+      if (changed.some(Boolean)) { storeSaved(l); paint(); }
+    }
+    $('saved-btn').onclick = () => { drawSaved(); $('saved').classList.toggle('open'); };
+    $('saved-x').onclick = () => $('saved').classList.remove('open');
+    $('saved-list').addEventListener('click', (e) => {
+      const del = e.target.closest('[data-del]');
+      if (del) { storeSaved(loadSaved().filter((x) => x.key !== del.dataset.del)); drawSaved(); }
+    });
+
+    // ------------------------------------------------------------ demande venue de la recherche IA (/pronos …)
+    const hq = new URLSearchParams(location.hash.slice(1)).get('q');
+    if (hq) {
+      const t = norm(hq);
+      const guess = /\b(nba|wnba|basket)/.test(t) ? 'basketball' : /\b(tennis|atp|wta|roland|wimbledon)/.test(t) ? 'tennis' : /\b(rugby|top 14|six nations|xv)/.test(t) ? 'rugby' :
+        /\b(nhl|hockey)/.test(t) ? 'hockey' : /\b(nfl|super bowl)/.test(t) ? 'nfl' : /\b(mlb|baseball)/.test(t) ? 'baseball' : /\b(ufc|mma|boxe)/.test(t) ? 'mma' :
+        /\b(f1|formule 1|grand prix|gp)\b/.test(t) ? 'f1' : /\b(lol|league of legends|cs2|counter strike|valorant|dota|rocket league|esport|lec|lfl|worlds|major)\b/.test(t) ? 'esport' : 'soccer';
+      $('sports').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.id === guess));
+      setSport(guess);
+      const ec = guess === 'esport' && sport.comps.find((c) => t.includes(norm(c[1]).split(' ')[0]));
+      if (ec) $('comp').value = ec[0];
+      const who = hq.replace(/\b(pronos?(tics?)?|paris?|pari sportif|analyse|match|ce soir|aujourd’hui|aujourd'hui|demain|nba|nfl|nhl|ufc|f1|ligue 1)\b/gi, ' ').replace(/\s+/g, ' ').trim();
+      $('who').value = who;
+      if (/demain/.test(t)) $('when').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.id === '1'));
+      setTimeout(() => findMatches(true), 150);
+    }
+  })();
+  </script>
+</body>
+</html>
