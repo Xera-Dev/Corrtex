@@ -1,6 +1,6 @@
 [package]
 name = "corrtex"
-version = "0.3.2"
+version = "0.3.3"
 description = "Corrtex - navigateur léger"
 edition = "2021"
 
