@@ -92,7 +92,7 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .err-box { margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
-  @keyframes rin { from { opacity: 0; transform: translateY(8px); } }
+  @keyframes rin { from { transform: translateY(8px); } }
   /* ------------------------------------------------ pronostics */
   .sports { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
   .sports button { height: 40px; padding: 0 15px; border-radius: 20px; font-size: 13.5px; font-weight: 600; color: var(--fg-dim); background: var(--glass); border: 1px solid var(--hover); display: inline-flex; align-items: center; gap: 8px; }
@@ -436,7 +436,10 @@
       const end = new Date(b); end.setHours(23, 59, 59);
       const start = new Date(a); start.setHours(0, 0, 0);
       if (days !== 1) start.setTime(Date.now() - 3 * 3600e3); // matchs en cours compris
-      return { q: ymd(a) + '-' + ymd(b), start, end };
+      // ESPN refuse les plages (« 20261126-20261129 » : erreur 400) : un jour par requête
+      const days2 = [];
+      for (const d = new Date(a); d <= b && days2.length < 8; d.setDate(d.getDate() + 1)) days2.push(ymd(d));
+      return { q: ymd(a) + '-' + ymd(b), days: days2, start, end };
     }
     function decOdds(ml) {
       if (ml == null || ml === '') return null;
@@ -507,17 +510,16 @@
           const paths = compV === 'top' ? TOP : [compV];
           const res = await Promise.all(paths.map(async (p) => {
             const label = (sport.comps.find((c) => c[0] === p) || [p, p])[1];
-            try {
-              let j = await espn(p + '/scoreboard?dates=' + win.q + '&limit=300');
-              let m = extract(j, p, label, win);
-              // tennis, MMA, F1 : le tableau du tournoi en cours, sans filtre de dates
-              if (!m.length && (sport.solo || sport.field)) { j = await espn(p + '/scoreboard'); m = extract(j, p, label, win); }
-              return m;
-            } catch (e) { return []; }
+            const pages = await Promise.all(win.days.map((d) => espn(p + '/scoreboard?dates=' + d + '&limit=300').then((j) => extract(j, p, label, win)).catch(() => [])));
+            let m = pages.flat();
+            // tennis, MMA, F1, rugby : le tableau de l'épreuve en cours, sans filtre de dates
+            if (!m.length) { try { m = extract(await espn(p + '/scoreboard'), p, label, win); } catch (e) {} }
+            const seen = new Set();
+            return m.filter((x) => !seen.has(x.id) && seen.add(x.id));
           }));
           list = res.flat().sort((a, b) => new Date(a.date) - new Date(b.date));
         }
-        setStep(s1, 'ok', list.length ? list.length + ' match' + (list.length > 1 ? 's' : '') + ' trouvé' + (list.length > 1 ? 's' : '') : 'Aucun match trouvé sur cette période');
+        setStep(s1, list.length ? 'ok' : 'err', list.length ? list.length + ' match' + (list.length > 1 ? 's' : '') + ' trouvé' + (list.length > 1 ? 's' : '') : 'Aucun match trouvé sur cette période');
       } catch (e) {
         setStep(s1, 'err', 'Échec : ' + e);
       }
@@ -534,7 +536,7 @@
       $('go').disabled = false;
       drawFixtures();
       if (autoRun && picked.size && picked.size <= 4) analyse();
-      else $('fx').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      else $('fx').scrollIntoView({ block: 'start' });
     }
     async function aiFixtures(q) {
       const d1 = q.win.start.toISOString().slice(0, 10), d2 = q.win.end.toISOString().slice(0, 10);
@@ -639,6 +641,14 @@
             const hs = e.homeTeamScore ?? '', as = e.awayTeamScore ?? '';
             return { date: e.gameDate, txt: hs !== '' ? (homeIsTeam ? tn + ' ' + hs + '-' + as + ' ' + on : on + ' ' + hs + '-' + as + ' ' + tn) : (homeIsTeam ? tn + ' ' + (e.score || '') + ' ' + on : on + ' ' + (e.score || '') + ' ' + tn) };
           });
+          if (!d.h2h.length) {
+            const ss = (s.seasonseries || []).find((x) => x && (x.events || []).length);
+            if (ss) d.h2h = ss.events.filter((e) => (e.statusType || {}).completed !== false).slice(0, 6).map((e) => {
+              const cs = e.competitors || [], h = cs.find((c) => c.homeAway === 'home') || cs[0] || {}, a = cs.find((c) => c !== h) || {};
+              const nm = (c) => (c.team || {}).displayName || '?', sc = (c) => c.score == null ? '' : typeof c.score === 'object' ? (c.score.displayValue ?? c.score.value) : c.score;
+              return { date: e.date, txt: nm(h) + ' ' + sc(h) + '-' + sc(a) + ' ' + nm(a) };
+            });
+          }
           const entries = [];
           const walk = (g) => { if (!g) return; if (g.standings && g.standings.entries) entries.push(...g.standings.entries); (g.groups || g.children || []).forEach(walk); };
           walk(s.standings);
@@ -733,7 +743,7 @@
       steps = []; $('err').hidden = true;
       $('out').innerHTML = ''; $('out').classList.add('on');
       drawBoard();
-      $('progress').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      $('progress').scrollIntoView({ block: 'start' });
       const sD = step('Collecte des données : forme, classement, face-à-face, absences, cotes, actualités…');
       await Promise.all(ms.map((m) => gather(m).catch(() => {})));
       if (run !== r0) return;
@@ -751,7 +761,7 @@
         g.forEach((m) => { m.state[role.k] = 'run'; });
         drawBoard();
         try {
-          const t = await ask(prompt(role, g), slot, 170000);
+          const t = await ask(prompt(role, g), slot, 190000);
           const j = json(t);
           const items = (j && (j.matches || (Array.isArray(j) ? j : null))) || [];
           g.forEach((m, i) => {

@@ -16,6 +16,8 @@
     const C = window.Corrtex, S = window.CorrtexShop;
     const eur = (n) => n == null ? '' : n.toLocaleString('fr-FR', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }) + ' €';
     const fetchPage = (url) => window.__TAURI__.core.invoke('shop_fetch', { url });
+    // boutique protégée (refus 403, page construite en JavaScript) : chargée dans une vue cachée
+    const renderPage = (url) => window.__TAURI__.core.invoke('shop_render', { url });
 
     // ------------------------------------------------------------ IA (page d'IA cachée, sans clé d'API)
     let aiSeq = 0;
@@ -118,6 +120,7 @@
       return {
         ok(t) { s.s = 'ok'; if (t) s.t = t; publish(); },
         fail(t) { s.s = 'err'; if (t) s.t = t; publish(); },
+        text(t) { s.t = t; publish(); },
       };
     }
 
@@ -197,7 +200,13 @@
         const st = step('Recherche « ' + q + ' » sur ' + site.name + '…');
         const url = site.search.split('{q}').join(encodeURIComponent(q));
         try {
-          const list = S.parseShopGeneric(await fetchPage(url), url);
+          let list = [];
+          try { list = S.parseShopGeneric(await fetchPage(url), url); } catch (e) { list = []; }
+          // rien de lisible par la demande directe : la page est affichée en coulisse, comme dans un onglet
+          if (!list.length) {
+            st.text(site.name + ' · « ' + q + ' » : chargement de la page…');
+            list = S.parseShopGeneric(await renderPage(url), url);
+          }
           let n = 0;
           list.forEach((c) => {
             const id = 'x' + S.norm(site.name + ' ' + c.name).replace(/ /g, '').slice(0, 80);
@@ -208,7 +217,7 @@
             n++;
           });
           if (list.length) st.ok(site.name + ' · « ' + q + ' » : ' + list.length + ' produit' + (list.length > 1 ? 's' : '') + (n < list.length ? ' (' + n + ' nouveaux)' : ''));
-          else st.fail(site.name + ' · « ' + q + ' » : aucun article lisible (la page se construit peut-être en JavaScript)');
+          else st.fail(site.name + ' · « ' + q + ' » : aucun article trouvé sur la page');
         } catch (e) { st.fail(site.name + ' · « ' + q + ' » : ' + e); }
       };
       await Promise.all([0, 1, 2, 3].map(async () => { while (tasks.length) { const t = tasks.shift(); await one(t[0], t[1]); } }));

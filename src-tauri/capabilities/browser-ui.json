@@ -114,6 +114,7 @@
     "allow-popup-show",
     "allow-shop-context",
     "allow-shop-fetch",
+    "allow-shop-render",
     "allow-shop-ask-ai",
     "allow-backup-export",
     "allow-backup-import",

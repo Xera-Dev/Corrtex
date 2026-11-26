@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-shop-render-result"
+description = "Enables the shop_render_result command without any pre-configured scope."
+commands.allow = ["shop_render_result"]
+
+[[permission]]
+identifier = "deny-shop-render-result"
+description = "Denies the shop_render_result command without any pre-configured scope."
+commands.deny = ["shop_render_result"]

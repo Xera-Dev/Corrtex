@@ -1291,6 +1291,11 @@
   (function () {
     if (!/(^|\.)youtube\.com$/.test(location.hostname) || window.top !== window) return;
     var host = null, root = null, curVid = '', out = null, busyReq = '', ctx = null, mode = '';
+    // YouTube impose les « Trusted Types » : innerHTML refuse le texte brut (le panneau ne
+    // s'affichait pas). Le HTML du panneau, construit et échappé ici, passe par une règle nommée.
+    var TTP = null;
+    try { if (window.trustedTypes && trustedTypes.createPolicy) TTP = trustedTypes.createPolicy('corrtex-yt', { createHTML: function (x) { return x; } }); } catch (e) {}
+    function TT(x) { return TTP ? TTP.createHTML(x) : x; }
     function vid() { try { return new URL(location.href).searchParams.get('v') || ''; } catch (e) { return ''; } }
     function dark() { return document.documentElement.hasAttribute('dark') || matchMedia('(prefers-color-scheme: dark)').matches; }
     function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -1337,10 +1342,10 @@
     function build() {
       host = document.createElement('corrtex-yt');
       root = host.attachShadow({ mode: 'open' });
-      root.innerHTML = '<style>' + css() + '</style><div class="p"><div class="h">' + svg(ICON.spark) + 'Corrtex IA<small>sur cette vidéo</small></div>' +
+      root.innerHTML = TT('<style>' + css() + '</style><div class="p"><div class="h">' + svg(ICON.spark) + 'Corrtex IA<small>sur cette vidéo</small></div>' +
         '<div class="g"><button class="b" data-a="sum">' + svg(ICON.sum) + 'Résumer</button><button class="b" data-a="keys">' + svg(ICON.keys) + 'Moments clés</button>' +
         '<button class="b" data-a="sim">' + svg(ICON.sim) + 'Vidéos similaires</button><button class="b" data-a="ask">' + svg(ICON.ask) + 'Poser une question</button></div>' +
-        '<div class="o"></div></div>';
+        '<div class="o"></div></div>');
       out = root.querySelector('.o');
       root.addEventListener('click', function (e) {
         var b = e.target.closest('.b');
@@ -1358,7 +1363,7 @@
       if (!sec) return;
       var v = vid();
       if (!host) build();
-      if (curVid !== v) { curVid = v; ctx = null; busyReq = ''; mode = ''; out.innerHTML = ''; setOn(''); root.querySelector('style').textContent = css(); }
+      if (curVid !== v) { curVid = v; ctx = null; busyReq = ''; mode = ''; out.innerHTML = TT(''); setOn(''); root.querySelector('style').textContent = css(); }
       // en tête de la colonne de droite, à la place de la première vidéo proposée
       var rel = sec.querySelector('#related');
       if (!host.isConnected || host.parentNode !== sec) { if (rel && rel.parentNode === sec) sec.insertBefore(host, rel); else sec.prepend(host); }
@@ -1423,14 +1428,14 @@
     }
     window.__corrtexPageAI = function (req, text, done, error) {
       if (req !== busyReq) return;
-      if (text) out.innerHTML = render(text) + (done ? '' : '<p><span class="dots"><i></i><i></i><i></i></span></p>');
+      if (text) out.innerHTML = TT(render(text) + (done ? '' : '<p><span class="dots"><i></i><i></i><i></i></span></p>'));
       if (done || error) {
         busyReq = '';
-        if (!text) out.innerHTML = '<p class="err">Pas de réponse de l’IA. Vérifiez que vous êtes connecté à l’IA du panneau.</p>';
+        if (!text) out.innerHTML = TT('<p class="err">Pas de réponse de l’IA. Vérifiez que vous êtes connecté à l’IA du panneau.</p>');
       }
     };
     function askAI(instr, extra) {
-      out.innerHTML = '<p><span class="dots"><i></i><i></i><i></i></span> <span class="dim">Lecture de la vidéo…</span></p>';
+      out.innerHTML = TT('<p><span class="dots"><i></i><i></i><i></i></span> <span class="dim">Lecture de la vidéo…</span></p>');
       context().then(function (c) {
         var src = 'Vidéo YouTube : « ' + c.title + ' »' + (c.channel ? ' (chaîne ' + c.channel + ')' : '') + (c.length ? ', durée ' + fmt(c.length) : '') + '.\n' +
           (c.desc ? 'Description :\n' + c.desc + '\n' : '') +
@@ -1440,7 +1445,7 @@
       });
     }
     function similar() {
-      out.innerHTML = '<p><span class="dots"><i></i><i></i><i></i></span> <span class="dim">Recherche de vidéos similaires…</span></p>';
+      out.innerHTML = TT('<p><span class="dots"><i></i><i></i><i></i></span> <span class="dim">Recherche de vidéos similaires…</span></p>');
       context().then(function (c) {
         var q = c.title.replace(/[|\-–—:!?#()[\]"«»]+/g, ' ').replace(/\b(official|officiel(le)?|video|vidéo|clip|4k|hd|full|episode|épisode)\b/gi, ' ').replace(/\s+/g, ' ').trim().split(' ').slice(0, 7).join(' ');
         return fetch('/results?search_query=' + encodeURIComponent(q), { credentials: 'include' }).then(function (r) { return r.text(); }).then(function (h) {
@@ -1453,15 +1458,15 @@
             for (var k in o) walk(o[k], d + 1);
           })(data, 0);
           list = list.filter(function (v) { return v.videoId !== curVid; }).slice(0, 6);
-          if (!list.length) { out.innerHTML = '<p class="dim">Aucune vidéo similaire trouvée.</p>'; return; }
+          if (!list.length) { out.innerHTML = TT('<p class="dim">Aucune vidéo similaire trouvée.</p>'); return; }
           var txt = function (x) { return x ? (x.simpleText || (x.runs || []).map(function (r) { return r.text; }).join('')) : ''; };
-          out.innerHTML = list.map(function (v) {
+          out.innerHTML = TT(list.map(function (v) {
             var th = (v.thumbnail && v.thumbnail.thumbnails || []).slice(-1)[0];
             return '<button class="v" data-id="' + esc(v.videoId) + '"><span class="im">' + (th ? '<img alt="" loading="lazy" src="' + esc(th.url) + '">' : '') + (v.lengthText ? '<span class="du">' + esc(txt(v.lengthText)) + '</span>' : '') + '</span>' +
               '<span><span class="t">' + esc(txt(v.title)) + '</span><span class="c">' + esc([txt(v.ownerText), txt(v.shortViewCountText), txt(v.publishedTimeText)].filter(Boolean).join(' · ')) + '</span></span></button>';
-          }).join('');
+          }).join(''));
         });
-      }).catch(function () { out.innerHTML = '<p class="err">Recherche impossible pour le moment.</p>'; });
+      }).catch(function () { out.innerHTML = TT('<p class="err">Recherche impossible pour le moment.</p>'); });
     }
     function run(a) {
       mode = a;
@@ -1470,7 +1475,7 @@
       else if (a === 'keys') askAI('Donne les moments clés de la vidéo sous forme de liste chronologique : « 12:34 — ce qui se passe », 5 à 10 éléments. Sans transcription, propose les grandes parties probables sans horodatage.');
       else if (a === 'sim') similar();
       else if (a === 'ask') {
-        out.innerHTML = '<div class="q"><input placeholder="Votre question sur la vidéo…" maxlength="300"><button>Demander</button></div>';
+        out.innerHTML = TT('<div class="q"><input placeholder="Votre question sur la vidéo…" maxlength="300"><button>Demander</button></div>');
         var inp = out.querySelector('input');
         var go = function () { var v = inp.value.trim(); if (v) askAI('Réponds à cette question sur la vidéo, en citant les horodatages utiles (format 12:34) : ' + v); };
         out.querySelector('button').onclick = go;

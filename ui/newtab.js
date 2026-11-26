@@ -59,6 +59,8 @@
     e.preventDefault();
     // mode IA : une adresse s'ouvre quand même, le reste est posé à l'IA
     const typed = $('q').value.trim();
+    // les commandes (/shopping, /voyage, /pronos, /agent) marchent aussi hors du mode IA
+    if (!aiOn && /^\/(shopping|achat|produit|agent|voyages?|trip|pronos?|pronostics?|paris?|bet)\b/i.test(typed)) setAi(true);
     if (aiOn && typed && !/(^|\s)![a-z]/i.test(typed) && (/^\//.test(typed) || C.toUrl(typed) === C.searchUrl(typed))) { route(typed, false, true); $('q').value = ''; hideSugg(); return; }
     const url = C.toUrl($('q').value);
     if (url) { C.prefetchSearch(url); location.href = url; }
@@ -212,15 +214,28 @@
     const lines = String(text).replace(/\r/g, '').split('\n');
     let title = '', lede = '', body = '', ul = false, firstP = true;
     const inline = (l) => esc(l).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*]+)\*/g, '$1<i>$2</i>')
-      .replace(/\[(\d{1,2})\]/g, (m, n) => { const r = t.src[+n - 1]; return r ? '<a class="cite" href="' + esc(r.url) + '" title="' + esc(r.title) + '">' + n + '</a>' : m; });
-    for (const raw of lines) {
-      const l = raw.trim();
-      if (!l) continue;
-      const li = l.match(/^(?:[-*•]|\d+[.)])\s+(.*)/);
+      .replace(/\[(\d{1,2}(?:\s*[,;]\s*\d{1,2})*)\]/g, (m, ns) => {
+        const out = ns.split(/\s*[,;]\s*/).map((n) => { const r = t.src[+n - 1]; return r ? '<a class="cite" href="' + esc(r.url) + '" title="' + esc(r.title) + '">' + n + '</a>' : ''; }).join('');
+        return out || m;
+      });
+    // l'IA renvoie souvent le texte déjà mis en forme : les intertitres arrivent sans « ## »
+    // (ligne courte, sans ponctuation finale, suivie d'un paragraphe) et les listes sans tiret
+    const isHead = (l, next) => l.length <= 70 && !/[.!?;:,…»)\]]$/.test(l) && !/^[-*•\d]/.test(l) && !!next && next.length > l.length + 20;
+    let keep = false;
+    const clines = lines.map((x) => x.trim()).filter(Boolean);
+    for (let i = 0; i < clines.length; i++) {
+      const l = clines[i];
+      let li = l.match(/^(?:[-*•]|\d+[.)])\s+(.*)/);
+      // après « À retenir », les lignes « Libellé : texte » forment une liste
+      if (!li && keep && /^[^.:]{2,48}\s:\s/.test(l)) li = [l, l.replace(/^([^:]+?)\s:\s/, '**$1** : ')];
       if (!li && ul) { body += '</ul>'; ul = false; }
       if (/^#\s+/.test(l) && !title) title = inline(l.replace(/^#\s+/, ''));
       else if (/^>\s*/.test(l)) lede += (lede ? ' ' : '') + inline(l.replace(/^>\s*/, '').replace(/^chapeau\s*:\s*/i, ''));
-      else if (/^#{2,4}\s+/.test(l)) { const h = l.replace(/^#{2,4}\s+/, ''); body += '<h3' + (/^à retenir/i.test(h) ? ' class="keep"' : '') + '>' + inline(h) + '</h3>'; }
+      else if (/^#{2,4}\s+/.test(l) || ((title || lede || body) && !li && (isHead(l, clines[i + 1]) || /^(à retenir|en bref|l'essentiel|l’essentiel)\s*:?$/i.test(l)))) {
+        const h = l.replace(/^#{2,4}\s+/, '').replace(/\s*:$/, '');
+        keep = /^(à retenir|en bref|l'essentiel|l’essentiel)/i.test(h);
+        body += '<h3' + (keep ? ' class="keep"' : '') + '>' + inline(h) + '</h3>';
+      }
       else if (li) { if (!ul) { body += '<ul>'; ul = true; } body += '<li>' + inline(li[1]) + '</li>'; }
       else if (!title && !body && !lede) title = inline(l.replace(/^titre\s*:\s*/i, ''));
       else { body += '<p' + (firstP ? ' class="first"' : '') + '>' + inline(l) + '</p>'; firstP = false; }
@@ -233,7 +248,7 @@
       (title ? '<h1>' + title + '</h1>' : '') + (lede ? '<p class="lede">' + lede + '</p>' : '');
     if (t.person) {
       // personne : titre et chapeau à gauche, portrait et fiche à droite, biographie en dessous
-      t.el.innerHTML = '<article class="news person"><div class="ptop"><div class="phead">' + head + '</div>' + personCard(t.person) + '</div>' +
+      t.el.innerHTML = '<article class="news person"><div class="ptop">' + personCard(t.person) + '<div class="phead">' + head + '</div></div>' +
         '<div class="body">' + body + (done ? '' : '<span class="caret"></span>') + '</div></article>';
       return;
     }
@@ -254,7 +269,7 @@
       if (l.trim()) out += '<p>' + l + '</p>';
     }
     if (ul) out += '</ul>';
-    return out.replace(/\[(\d{1,2})\]/g, (m, n) => { const r = src[+n - 1]; return r ? '<a class="cite" href="' + esc(r.url) + '" title="' + esc(r.title) + '">' + n + '</a>' : m; });
+    return out.replace(/\[(\d{1,2}(?:\s*[,;]\s*\d{1,2})*)\]/g, (m, ns) => ns.split(/\s*[,;]\s*/).map((n) => { const r = src[+n - 1]; return r ? '<a class="cite" href="' + esc(r.url) + '" title="' + esc(r.title) + '">' + n + '</a>' : ''; }).join('') || m);
   }
   function scrollThread() { thread.scrollTop = thread.scrollHeight; }
 

@@ -61,6 +61,9 @@
   .f input:focus, .f select:focus { border-color: color-mix(in srgb, var(--l1, #ff4f7b) 60%, var(--glass-border)); }
   .f select option { background: var(--page-2); }
   .row2 { display: flex; gap: 8px; } .row2 input, .row2 select { flex: 1; min-width: 0; width: 100%; }
+  .f.duo { grid-column: span 2; }
+  .row2 input[type=date] { padding: 0 8px; font-size: 13px; }
+  @media (max-width: 640px) { .f.duo { grid-column: auto; } }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chips button { height: 34px; padding: 0 13px; border-radius: 17px; font-size: 13px; color: var(--fg-dim); background: var(--glass); border: 1px solid var(--hover); display: inline-flex; align-items: center; gap: 6px; }
   .chips button svg { width: 15px; height: 15px; }
@@ -239,9 +242,9 @@
       <div class="grid">
         <div class="f"><label for="from">Départ</label><input id="from" placeholder="Paris"></div>
         <div class="f"><label for="to">Destination</label><input id="to" placeholder="Ville, pays… ou vide : surprenez-moi"></div>
-        <div class="f"><label>Dates</label><div class="row2"><input id="d1" type="date"><input id="d2" type="date"></div></div>
+        <div class="f duo"><label>Dates</label><div class="row2"><input id="d1" type="date"><input id="d2" type="date"></div></div>
         <div class="f"><label for="flex">Ou période</label><input id="flex" placeholder="ex. un week-end en avril"></div>
-        <div class="f"><label>Voyageurs</label><div class="row2"><select id="adults"></select><select id="kids"></select></div></div>
+        <div class="f duo"><label>Voyageurs</label><div class="row2"><select id="adults"></select><select id="kids"></select></div></div>
       </div>
       <div class="opts">
         <div class="f"><label>Budget total</label>
@@ -337,11 +340,28 @@
     for (let i = 0; i <= 6; i++) $('kids').insertAdjacentHTML('beforeend', '<option value="' + i + '">' + (i ? i + ' enfant' + (i > 1 ? 's' : '') : 'sans enfant') + '</option>');
     const bud = $('budget');
     const showBud = () => { $('budget-v').textContent = (+bud.value >= 10000 ? '10 000 € +' : eur(+bud.value)); };
-    bud.addEventListener('input', showBud);
+    let budTouched = false;
+    bud.addEventListener('input', () => { budTouched = true; showBud(); });
     showBud();
+    // « 600 euros pour 2 », « 1 500 € », « 3 personnes », « avec 2 enfants » : repris dans les réglages
+    function fromText(t) {
+      t = String(t || '').toLowerCase();
+      const b = t.match(/(\d[\d\s .]{0,7}\d|\d)\s*(?:k\s*)?(?:€|euros?|eur\b)/);
+      if (b && !budTouched) {
+        let v = +b[1].replace(/[\s .]/g, '');
+        if (/\d\s*k\s*(€|euro)/.test(b[0])) v *= 1000;
+        if (v >= 50 && v <= 50000) { bud.value = Math.min(10000, Math.max(100, Math.round(v / 50) * 50)); showBud(); }
+      }
+      const a = t.match(/(?:pour|à|a)\s+(\d)\s*(?:personnes?|adultes?|voyageurs?|pers\b)?(?![\d€]|\s*(?:€|euros?|jours?|nuits?|semaines?))/) || t.match(/(\d)\s*(?:personnes|adultes|voyageurs)/);
+      if (a && +a[1] >= 1 && +a[1] <= 9) $('adults').value = a[1];
+      if (/\ben couple\b|\bà deux\b|\ba deux\b/.test(t)) $('adults').value = '2';
+      const k = t.match(/(\d)\s*enfants?/);
+      if (k && +k[1] <= 6) $('kids').value = k[1];
+    }
     const wish = $('wish');
     const grow = () => { wish.style.height = 'auto'; wish.style.height = Math.min(160, wish.scrollHeight) + 'px'; };
     wish.addEventListener('input', grow);
+    wish.addEventListener('change', () => fromText(wish.value));
     wish.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('form').requestSubmit(); } });
     const EX = ['Un week-end romantique en Italie, en train', 'Une semaine au soleil en février, plage et snorkeling', 'Road trip nature en Écosse pour 4', 'Les îles grecques en ferry cet été', 'Surprends-moi : 3 jours, 500 € tout compris'];
     EX.forEach((t) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.onclick = () => { wish.value = t; grow(); wish.focus(); }; $('examples').appendChild(b); });
@@ -421,7 +441,7 @@
     }
 
     // ------------------------------------------------------------ lancement
-    $('form').addEventListener('submit', (e) => { e.preventDefault(); run(input()); });
+    $('form').addEventListener('submit', (e) => { e.preventDefault(); fromText(wish.value); run(input()); });
     async function run(q) {
       if (running) return;
       if (!q.wish && !q.to) { wish.focus(); wish.placeholder = 'Dites au moins où ou comment vous voulez voyager…'; return; }
@@ -435,7 +455,7 @@
       $('progress').scrollIntoView({ behavior: 'smooth', block: 'center' });
       const s1 = step('L’agent analyse votre demande et compare les destinations…');
       try {
-        const t = await ask(planPrompt(q), 3, 150000, (txt) => { setStep(s1, 'run', 'L’agent rédige les options (' + Math.min(99, Math.round(txt.length / 40)) + ' %)…'); });
+        const t = await ask(planPrompt(q), 3, 190000, (txt) => { setStep(s1, 'run', 'L’agent rédige les options (' + Math.min(99, Math.round(txt.length / 40)) + ' %)…'); });
         const r = json(t);
         if (!r || !Array.isArray(r.destinations) || !r.destinations.length) throw 'réponse de l’IA illisible';
         setStep(s1, 'ok', r.destinations.length > 1 ? r.destinations.length + ' destinations proposées' : 'Voyage à ' + r.destinations[0].name + ' préparé');
@@ -463,7 +483,7 @@
       if (!t0.days[i]) {
         t0.days[i] = { loading: true };
         const dates = t0.r.dates && t0.r.dates.start ? t0.r.dates : { start: t0.q.d1 || today, end: t0.q.d2 || t0.q.d1 || today };
-        ask(dayPrompt(t0.q, d, dates), 2, 150000).then((txt) => {
+        ask(dayPrompt(t0.q, d, dates), 2, 190000).then((txt) => {
           const j = json(txt);
           t0.days[i] = j && Array.isArray(j.days) ? { list: j.days } : { error: true };
         }).catch(() => { t0.days[i] = { error: true }; }).finally(() => { if (trip === t0) render(); });
@@ -675,7 +695,7 @@
       render();
       const q = Object.assign({}, t0.q, { to: hint || '', refine: t0.q.refine.concat([hint ? 'ajoute cette destination : ' + hint : 'propose UNE nouvelle destination différente de : ' + names.join(', ')]) });
       try {
-        const txt = await ask(planPrompt(q, true), 1, 150000);
+        const txt = await ask(planPrompt(q, true), 1, 190000);
         const j = json(txt), d = j && Array.isArray(j.destinations) && j.destinations[0];
         if (!d || !d.name) throw 'réponse de l’IA illisible';
         if (trip !== t0) return;
@@ -759,7 +779,7 @@
 
     // ------------------------------------------------------------ demande venue de la recherche IA (/voyage …)
     const hq = new URLSearchParams(location.hash.slice(1)).get('q');
-    if (hq) { wish.value = hq; grow(); setTimeout(() => $('form').requestSubmit(), 200); }
+    if (hq) { wish.value = hq; grow(); fromText(hq); setTimeout(() => $('form').requestSubmit(), 200); }
     else setTimeout(() => wish.focus(), 100);
   })();
   </script>

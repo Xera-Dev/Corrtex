@@ -200,7 +200,7 @@
     if (!site || !site.reply) return;
     var last = '', stable = 0, start = Date.now(), sentAt = 0, base = mark;
     function report(text, done, error) {
-      try { window.__TAURI_INTERNALS__.invoke('ai_quick_result', { req: req, text: (text || '').slice(0, 8000), done: !!done, error: !!error }); } catch (e) {}
+      try { window.__TAURI_INTERNALS__.invoke('ai_quick_result', { req: req, text: (text || '').slice(0, 40000), done: !!done, error: !!error }); } catch (e) {}
     }
     var t = setInterval(function () {
       var ns = document.querySelectorAll(site.reply);
@@ -213,7 +213,10 @@
         if (Date.now() - sentAt > 250) { report(txt, false); sentAt = Date.now(); }
       }
       if (last && !busy && Date.now() - stable > 1800) { clearInterval(t); report(last, true); }
-      else if (Date.now() - start > 70000) { clearInterval(t); report(last, true, !last); }
+      // rien ne s'écrit et l'IA ne travaille pas : la question n'est pas partie
+      else if (!last && !busy && Date.now() - start > 45000) { clearInterval(t); report('', true, true); }
+      // longues réponses (JSON détaillé, réflexion de Gemini) : jusqu'à 3 minutes
+      else if (Date.now() - start > 180000) { clearInterval(t); report(last, true, !last); }
     }, 300);
   };
 

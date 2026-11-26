@@ -3,10 +3,13 @@ fn main() {
         tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
             // envoyé par les pages web des onglets (script injecté)
             "tab_event",
+            // vue cachée d'une boutique (recherche d'achat) : renvoie le HTML affiché
+            "shop_render_result",
             // vue invisible qui lit le profil Google
             "google_profile",
             // interface du navigateur
             "get_state",
+            "shop_render",
             "new_tab",
             "close_tab",
             "activate_tab",

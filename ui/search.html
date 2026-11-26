@@ -280,6 +280,21 @@
     // ------------------------------------------------------------ outils
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+    // texte des actualités : DuckDuckGo y laisse des balises (<b>…</b>) et des entités (&#x27; &quot;)
+    const plain = (s) => { const d = document.createElement('textarea'); d.innerHTML = String(s || '').replace(/<[^>]*>/g, ''); return clean(d.value.replace(/<[^>]*>/g, '')); };
+    // « il y a 3 h » à partir de la date (DuckDuckGo l'écrit en anglais)
+    function ago(r) {
+      const t = +r.date ? new Date(+r.date * (+r.date < 1e12 ? 1000 : 1)) : null;
+      if (!t || isNaN(t)) return r.relative_time || '';
+      const m = Math.round((Date.now() - t) / 60000);
+      if (m < 1) return 'à l’instant';
+      if (m < 60) return 'il y a ' + m + ' min';
+      const h = Math.round(m / 60);
+      if (h < 24) return 'il y a ' + h + ' h';
+      const d = Math.round(h / 24);
+      if (d < 7) return 'il y a ' + d + ' jour' + (d > 1 ? 's' : '');
+      return t.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: t.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+    }
     const safeUrl = (u) => (/^https?:\/\//i.test(u || '') ? u : '');
     const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
     const html = (t) => new DOMParser().parseFromString(t, 'text/html');
@@ -410,7 +425,8 @@
       if (state.ms) parts.push((state.ms / 1000).toFixed(2).replace('.', ',') + ' s');
       if (ok.length) parts.push('via ' + ok.join(', '));
       let h = esc(parts.join(' · '));
-      if (state.errs.length) h += ' <span class="err">' + esc(state.errs.join(' · ')) + '</span> <button id="retry">Réessayer</button>';
+      // une source muette alors que d'autres ont répondu : pas d'alerte (les résultats sont là)
+      if (state.errs.length && !ok.length) h += ' <span class="err">' + esc(state.errs.join(' · ')) + '</span> <button id="retry">Réessayer</button>';
       statusEl.innerHTML = h;
       const r = $('retry');
       if (r) r.onclick = () => run(true);
@@ -480,8 +496,8 @@
         return '<a class="im' + cls + '" href="' + esc(safeUrl(r.url)) + '" data-img="' + esc(safeUrl(r.image)) + '" data-title="' + esc(r.title) + '">' +
           '<img loading="lazy" decoding="async" alt="" src="' + esc(safeUrl(r.thumbnail)) + '"><span>' + esc(r.title) + ' · ' + esc(hostOf(r.url)) + '</span></a>';
       },
-      news: (r) => '<li class="r"><div class="nw"><div style="flex:1;min-width:0"><div class="u"><img class="fav" loading="lazy" alt="" src="' + esc(C.favicon(r.url, 32)) + '"><span><b>' + esc(r.source || hostOf(r.url)) + '</b> · ' + esc(r.relative_time || '') + '</span></div>' +
-        '<a class="t" href="' + esc(safeUrl(r.url)) + '">' + esc(clean(r.title)) + '</a><p class="s">' + highlight(clean(r.excerpt)) + '</p></div>' +
+      news: (r) => '<li class="r"><div class="nw"><div style="flex:1;min-width:0"><div class="u"><img class="fav" loading="lazy" alt="" src="' + esc(C.favicon(r.url, 32)) + '"><span><b>' + esc(r.source || hostOf(r.url)) + '</b> · ' + esc(ago(r)) + '</span></div>' +
+        '<a class="t" href="' + esc(safeUrl(r.url)) + '">' + esc(plain(r.title)) + '</a><p class="s">' + highlight(plain(r.excerpt)) + '</p></div>' +
         (safeUrl(r.image) ? '<img class="th" loading="lazy" decoding="async" alt="" src="' + esc(r.image) + '" onerror="this.remove()">' : '') + '</div></li>',
       videos: (r) => {
         const img = r.images && (r.images.medium || r.images.large || r.images.small);
@@ -569,7 +585,7 @@
         if (l.trim()) out += '<p>' + l + '</p>';
       }
       if (ul) out += '</ul>';
-      return out.replace(/\[(\d{1,2})\]/g, (m, n) => { const r = aiSources[+n - 1]; return r ? '<a class="cite" href="' + esc(safeUrl(r.url)) + '" title="' + esc(r.title) + '">' + n + '</a>' : m; });
+      return out.replace(/\[(\d{1,2}(?:\s*[,;]\s*\d{1,2})*)\]/g, (m, ns) => ns.split(/\s*[,;]\s*/).map((n) => { const r = aiSources[+n - 1]; return r ? '<a class="cite" href="' + esc(safeUrl(r.url)) + '" title="' + esc(r.title) + '">' + n + '</a>' : ''; }).join('') || m);
     }
     let aiSources = [];
     function askAI() {

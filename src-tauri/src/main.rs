@@ -1345,6 +1345,9 @@ fn spawn_tab_view(app: &AppHandle, id: u32) -> Result<(), String> {
                         // page de résultats du moteur Corrtex : gardée pour la session et la barre d'adresse
                         if let Some(u) = tauri::Url::parse(&url).ok().filter(|u| is_internal(&url) && u.path().ends_with("/search.html")) {
                             t.page = format!("search.html#{}", u.fragment().unwrap_or(""));
+                        } else if t.page.starts_with("search.html") {
+                            // retour à une autre page (accueil…) : l'ancienne recherche quitte la barre d'adresse
+                            t.page.clear();
                         }
                         t.loading = !finished;
                         if t.loading {
@@ -2154,6 +2157,70 @@ async fn shop_fetch(app: AppHandle, url: String) -> Result<String, String> {
     }
 }
 
+/// Boutique qui refuse les demandes directes (protection anti-robots, page construite en
+/// JavaScript) : la page est chargée dans une vue cachée, comme dans un onglet, puis son HTML
+/// une fois affiché est renvoyé à la recherche d'achat.
+fn shop_renders() -> &'static Mutex<HashMap<String, std::sync::mpsc::Sender<String>>> {
+    static M: std::sync::OnceLock<Mutex<HashMap<String, std::sync::mpsc::Sender<String>>>> = std::sync::OnceLock::new();
+    M.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[tauri::command]
+async fn shop_render(app: AppHandle, webview: Webview, url: String) -> Result<String, String> {
+    let extra: Vec<String> = state(&app).settings.shop_sites.iter().filter(|s| s.on).filter_map(|s| shop_site_host(&s.search)).collect();
+    shop_url_allowed(&url, &extra)?;
+    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+    let label = format!("shopr-{}", N.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+    let win = caller_win(&webview);
+    let window = app.get_window(&win).ok_or("fenêtre introuvable")?;
+    let (w, _) = window_logical_size(&app, &win);
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    shop_renders().lock().unwrap_or_else(|e| e.into_inner()).insert(label.clone(), tx);
+    let parsed: tauri::Url = url.parse().map_err(|_| "adresse invalide")?;
+    let created = window.add_child(
+        web(label.clone(), WebviewUrl::External(parsed))
+            .focused(false)
+            .on_new_window(|_, _| NewWindowResponse::Deny)
+            .on_page_load(|wv, payload| {
+                if matches!(payload.event(), PageLoadEvent::Finished) {
+                    // la liste d'articles se construit souvent après le chargement : petite attente,
+                    // un défilement pour déclencher le chargement paresseux, puis lecture du HTML
+                    let wv = wv.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(Duration::from_millis(1800));
+                        let _ = wv.eval("try{window.scrollTo(0,document.body.scrollHeight/2)}catch(e){}");
+                        std::thread::sleep(Duration::from_millis(1200));
+                        let _ = wv.eval("try{window.__TAURI_INTERNALS__.invoke('shop_render_result',{html:document.documentElement.outerHTML.slice(0,3000000)})}catch(e){}");
+                    });
+                }
+            }),
+        LogicalPosition::new(w + 400.0, 0.0),
+        LogicalSize::new(1280.0, 900.0),
+    );
+    if let Err(e) = created {
+        shop_renders().lock().unwrap_or_else(|e| e.into_inner()).remove(&label);
+        return Err(e.to_string());
+    }
+    let html = tauri::async_runtime::spawn_blocking(move || rx.recv_timeout(Duration::from_secs(22)).ok()).await.ok().flatten();
+    shop_renders().lock().unwrap_or_else(|e| e.into_inner()).remove(&label);
+    if let Some(v) = app.get_webview(&label) {
+        let _ = v.close();
+    }
+    html.filter(|h| h.len() > 500).ok_or_else(|| "la page ne s'est pas affichée à temps".to_string())
+}
+
+/// HTML renvoyé par la vue cachée d'une boutique (voir shop_render).
+#[tauri::command]
+async fn shop_render_result(webview: Webview, html: String) {
+    let label = webview.label().to_string();
+    if !label.starts_with("shopr-") {
+        return;
+    }
+    if let Some(tx) = shop_renders().lock().unwrap_or_else(|e| e.into_inner()).remove(&label) {
+        let _ = tx.send(html);
+    }
+}
+
 /// Envoie une demande au panneau IA (l'ouvre s'il est fermé), par ex. « génère une image ».
 #[tauri::command]
 async fn ai_prompt(app: AppHandle, webview: Webview, prompt: String) -> Result<(), String> {
@@ -2787,7 +2854,11 @@ fn ensure_popup(app: &AppHandle, win: &str, prefix: &str) -> Result<(), String> 
     let main = app.get_window(win).ok_or("fenêtre introuvable")?;
     let vlabel = format!("{}-{win}", if prefix == "prvw" { "preview" } else { "popup" });
     let size = LogicalSize::new(300.0, 200.0);
+    // créée sur l'écran de la fenêtre principale : sinon, au premier affichage, elle change d'écran
+    // (et d'échelle) et Windows la décale ; elle apparaissait alors au mauvais endroit
+    let at = main.inner_position().ok().map(|p| p.to_logical::<f64>(main.scale_factor().unwrap_or(1.0))).unwrap_or(LogicalPosition::new(0.0, 0.0));
     let popup = WindowBuilder::new(app, &wlabel)
+        .position(at.x + 40.0, at.y + 40.0)
         .decorations(false)
         .transparent(true)
         .shadow(false)
@@ -2904,10 +2975,7 @@ fn open_popup(app: &AppHandle, win: &str, prefix: &str, mut data: serde_json::Va
     let vlabel = format!("{}-{win}", if prefix == "prvw" { "preview" } else { "popup" });
     popup_targets().lock().unwrap_or_else(|e| e.into_inner()).insert(wlabel.clone(), pos);
     if let Some(pw) = app.get_window(&wlabel) {
-        let _ = pw.set_size(psize);
-        // changer la taille peut déplacer la fenêtre (Windows : changement d'échelle ; macOS : la
-        // taille est appliquée depuis le coin bas) : la position est donnée après
-        let _ = pw.set_position(pos);
+        place_popup(&pw, psize, pos);
     }
     if let Some(wv) = app.get_webview(&vlabel) {
         set_bounds(&wv, LogicalPosition::new(0.0, 0.0), size);
@@ -2956,6 +3024,19 @@ fn screen_size(size: LogicalSize<f64>, scale: f64) -> tauri::Size {
     }
 }
 
+/// Taille puis position d'une petite fenêtre. Changer de position peut la faire passer sur un écran
+/// d'une autre échelle : Windows la redimensionne et la décale alors. On recommence tant qu'elle
+/// n'est pas exactement à sa place (deux passes suffisent).
+fn place_popup(w: &tauri::Window, size: tauri::Size, pos: tauri::Position) {
+    for _ in 0..3 {
+        let _ = w.set_size(size);
+        let _ = w.set_position(pos);
+        if !misplaced(w, &pos) {
+            break;
+        }
+    }
+}
+
 /// La petite fenêtre est-elle ailleurs que là où on l'a placée ?
 fn misplaced(w: &tauri::Window, target: &tauri::Position) -> bool {
     let Ok(o) = w.outer_position() else { return false };
@@ -2994,27 +3075,34 @@ async fn popup_fit(app: AppHandle, webview: Webview, height: f64) {
     let main_scale = app.get_window(&win).and_then(|m| m.scale_factor().ok());
     if let (Some(w), Some(scale)) = (app.get_window(&format!("{prefix}-{win}")), main_scale.or_else(|| webview.window().scale_factor().ok())) {
         let target = popup_targets().lock().unwrap_or_else(|e| e.into_inner()).get(&format!("{prefix}-{win}")).copied();
+        let mut fitted = None;
         if let Ok(size) = w.inner_size() {
             // largeur lue avec l'échelle de la petite fenêtre elle-même (celle avec laquelle elle a été mesurée)
             let own = w.scale_factor().unwrap_or(scale);
             let width = size.width as f64 / if cfg!(target_os = "macos") { own } else { scale };
             let size = LogicalSize::new(width, height.clamp(40.0, 700.0) + POP_MARGIN + 6.0);
             let _ = w.set_size(screen_size(size, scale));
+            fitted = Some(screen_size(size, scale));
             set_bounds(&webview, LogicalPosition::new(0.0, 0.0), size);
         }
         // aperçu déjà fermé (la souris a quitté l'onglet) : on ne le montre pas
         if prefix == "prvw" && state(&app).windows.get(&win).map(|x| x.preview.is_none()).unwrap_or(true) {
             return;
         }
-        // toujours à l'endroit voulu (sous l'onglet), même si le système l'a déplacée entre-temps
-        if let Some(p) = target {
+        // toujours à l'endroit voulu (sous l'onglet), même si le système l'a déplacée entre-temps ;
+        // placée AVANT d'apparaître : déplacée une fois visible, elle laissait une trace à l'écran
+        if let (Some(p), Some(sz)) = (target, fitted) {
+            place_popup(&w, sz, p);
+        } else if let Some(p) = target {
             let _ = w.set_position(p);
         }
         // contenu prêt : la fenêtre apparaît (un menu prend le focus pour se fermer au clic ailleurs)
         let _ = w.show();
         if let Some(p) = target {
             if misplaced(&w, &p) {
+                let _ = w.hide();
                 let _ = w.set_position(p);
+                let _ = w.show();
             }
         }
         if prefix == "popw" {
@@ -4113,11 +4201,13 @@ fn quick_ask_slot(app: &AppHandle, win: &str, slot: u8, tab: u32, bubble: String
         Some(wv) if fresh => quick_page_loaded(app, &wv),
         _ => quick_open(app, win, &key)?,
     }
-    // pas de réponse au bout de 75 s : la bulle propose d'ouvrir le panneau
+    // pas de réponse à temps : la bulle propose d'ouvrir le panneau. Les pages qui demandent de
+    // longues réponses (JSON du voyage, des pronostics, des comparaisons) attendent plus longtemps.
     let app2 = app.clone();
     let win2 = key.clone();
+    let wait = if matches!(cb, Some("__corrtexShopAI") | Some("__corrtexPageCmpAI") | Some("__corrtexPageAI")) { 195 } else { 75 };
     std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_secs(75));
+        std::thread::sleep(Duration::from_secs(wait));
         let left = {
             let mut b = state(&app2);
             match b.quick.get(&win2) {
@@ -4196,7 +4286,7 @@ async fn ai_quick_result(app: AppHandle, webview: Webview, req: u64, text: Strin
         }
     };
     if let Some(q) = q {
-        let text: String = text.chars().take(20000).collect();
+        let text: String = text.chars().take(60000).collect();
         bubble_update(&app, &q, &text, done, error);
     }
 }
@@ -7361,6 +7451,8 @@ fn main() {
             backup_export,
             backup_import,
             tab_preview,
+            shop_render,
+            shop_render_result,
             preview_close,
             tab_action,
             group_action,
